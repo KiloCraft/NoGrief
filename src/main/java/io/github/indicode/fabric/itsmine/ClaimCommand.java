@@ -47,19 +47,22 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class ClaimCommand {
     public static final SuggestionProvider DIRECTION_SUGGESTION_BUILDER = (source, builder) -> {
+        List<String> strings = new ArrayList<>();
         for (Direction direction: Direction.values()) {
-            builder.suggest(direction.getName());
+            strings.add(direction.getName());
         };
-        return builder.buildFuture();
+        return CommandSource.suggestMatching(strings, builder);
     };
     public static final SuggestionProvider<ServerCommandSource> CLAIM_PROVIDER = (source, builder) -> {
-        List<Claim> claims = ClaimManager.INSTANCE.getPlayerClaims(source.getSource().getPlayer().getGameProfile().getId());
+        ServerPlayerEntity player = source.getSource().getPlayer();
+        List<Claim> claims = ClaimManager.INSTANCE.getPlayerClaims(player.getGameProfile().getId());
         List<String> names = new ArrayList<>();
+        Claim current = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension);
+        if (current != null) names.add(current.name);
         for (Claim claim : claims) {
             names.add(claim.name);
         }
-        CommandSource.suggestMatching(names, builder);
-        return builder.buildFuture();
+        return CommandSource.suggestMatching(names, builder);
     };
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         LiteralArgumentBuilder<ServerCommandSource> command = CommandManager.literal("claim");
