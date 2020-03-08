@@ -39,6 +39,9 @@ public class LavaMixin {
             }
         }
     }
+
+    //Never gonna brun me up
+    //https://www.youtube.com/watch?v=dQw4w9WgXcQ
     @Redirect(method = "onRandomTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/World;setBlockState(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/BlockState;)Z"))
     public boolean neverGonnaBurnMeUp(World world, BlockPos newPos, BlockState blockState_1, World world_1, BlockPos oldPos, FluidState fluidState_1, Random random_1) {
         Claim oldClaim = ClaimManager.INSTANCE.getClaimAt(oldPos, world.getDimension().getType());
