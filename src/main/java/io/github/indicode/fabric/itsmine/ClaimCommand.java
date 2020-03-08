@@ -88,7 +88,7 @@ public class ClaimCommand {
                 return 0;
             });
 
-            ArgumentBuilder min = CommandManager.argument("min", BlockPosArgumentType.blockPos());
+            ArgumentBuilder<ServerCommandSource, ?> min = CommandManager.argument("min", BlockPosArgumentType.blockPos());
             RequiredArgumentBuilder<ServerCommandSource, PosArgument> max = CommandManager.argument("max", BlockPosArgumentType.blockPos());
             max.executes(context -> createClaim(
                     StringArgumentType.getString(context, "name"),
@@ -101,6 +101,35 @@ public class ClaimCommand {
             name.then(min);
             create.then(name);
             command.then(create);
+        }
+        {
+            LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word());
+            RequiredArgumentBuilder<ServerCommandSource, String> nameArgument = CommandManager.argument("name", StringArgumentType.word());
+
+            nameArgument.executes((context) -> {
+                ServerPlayerEntity player = context.getSource().getPlayer();
+                String name = StringArgumentType.getString(context, "claim");
+                String newName = StringArgumentType.getString(context, "name");
+                for (Claim playerClaim : ClaimManager.INSTANCE.getPlayerClaims(player.getUuid())) {
+                    if (playerClaim.name.equals(name)) {
+                        playerClaim.name = newName;
+                        context.getSource().sendFeedback(
+                                new LiteralText("Renamed the claim ").formatted(Formatting.YELLOW)
+                                        .append(new LiteralText(name).formatted(Formatting.GOLD))
+                                        .append(new LiteralText(" to ").formatted(Formatting.YELLOW))
+                                        .append(newName).formatted(Formatting.GOLD),
+                                true);
+                        return 1;
+                    }
+                }
+
+                return 1;
+            });
+
+            claimArgument.then(claimArgument);
+            rename.then(claimArgument);
+            command.then(rename);
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> stick = CommandManager.literal("stick");
