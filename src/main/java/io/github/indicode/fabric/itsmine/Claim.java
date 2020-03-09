@@ -218,6 +218,7 @@ public class Claim {
         CHANGE_FLAGS("modify_flags", "Change Claim Flags"),
         CHANGE_PERMISSIONS("modify_permissions", "Change Permissions"),
         //Normal
+        MODIFY("modify_properties", "Modify Claim Properties"),
         SPAWN_PROTECT("spawn_protect", "Spawn Protection Bypass"),
         PLACE_BREAK("place_break", "Place/Break Blocks"),
         ACTIVATE_BLOCKS("block_interact", "Right click Blocks"),

@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author Indigo Amann
  */
 public class ClaimCommand {
-    public static final SuggestionProvider DIRECTION_SUGGESTION_BUILDER = (source, builder) -> {
+    public static final SuggestionProvider<ServerCommandSource> DIRECTION_SUGGESTION_BUILDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
         for (Direction direction: Direction.values()) {
             strings.add(direction.getName());
@@ -104,30 +104,11 @@ public class ClaimCommand {
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
-            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word());
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
+                    .suggests(CLAIM_PROVIDER);
             RequiredArgumentBuilder<ServerCommandSource, String> nameArgument = CommandManager.argument("name", StringArgumentType.word());
-
-            nameArgument.executes((context) -> {
-                ServerPlayerEntity player = context.getSource().getPlayer();
-                String name = StringArgumentType.getString(context, "claim");
-                String newName = StringArgumentType.getString(context, "name");
-                for (Claim playerClaim : ClaimManager.INSTANCE.getPlayerClaims(player.getUuid())) {
-                    if (playerClaim.name.equals(name)) {
-                        playerClaim.name = newName;
-                        context.getSource().sendFeedback(
-                                new LiteralText("Renamed the claim ").formatted(Formatting.YELLOW)
-                                        .append(new LiteralText(name).formatted(Formatting.GOLD))
-                                        .append(new LiteralText(" to ").formatted(Formatting.YELLOW))
-                                        .append(newName).formatted(Formatting.GOLD),
-                                true);
-                        return 1;
-                    }
-                }
-
-                return 1;
-            });
-
-            claimArgument.then(claimArgument);
+            nameArgument.executes((context) -> rename(context, false));
+            claimArgument.then(nameArgument);
             rename.then(claimArgument);
             command.then(rename);
         }
@@ -261,7 +242,7 @@ public class ClaimCommand {
             command.then(transfer);
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> transfer = CommandManager.literal("accept_transfer");
+            LiteralArgumentBuilder<ServerCommandSource> transfer = CommandManager.literal("acceptTransfer");
             RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
             claim.suggests(CLAIM_PROVIDER);
             claim.executes(context -> acceptTransfer(context.getSource()));
@@ -385,6 +366,16 @@ public class ClaimCommand {
                 player.then(amount);
                 add.then(player);
                 admin.then(add);
+            }
+            {
+                LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
+                RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
+                        .suggests(CLAIM_PROVIDER);
+                RequiredArgumentBuilder<ServerCommandSource, String> nameArgument = CommandManager.argument("name", StringArgumentType.word());
+                nameArgument.executes((context) -> rename(context, true));
+                claimArgument.then(nameArgument);
+                rename.then(claimArgument);
+                admin.then(rename);
             }
             {
                 LiteralArgumentBuilder<ServerCommandSource> remove = CommandManager.literal("remove_blocks");
@@ -1022,5 +1013,28 @@ public class ClaimCommand {
             source.sendFeedback(new LiteralText("No player is specified").formatted(Formatting.RED), false);
         }
         return 0;
+    }
+    private static int rename(CommandContext<ServerCommandSource> context, boolean admin) throws CommandSyntaxException {
+        String name = StringArgumentType.getString(context, "claim");
+        String newName = StringArgumentType.getString(context, "name");
+        Claim claimToRename = ClaimManager.INSTANCE.claimsByName.get(name);
+        if (claimToRename == null) {
+            context.getSource().sendError(new LiteralText("Can't find a claim with that Name!"));
+            return -1;
+        }
+        if (ClaimManager.INSTANCE.claimsByName.containsKey(newName)) {
+            context.getSource().sendError(new LiteralText("That name is already taken!"));
+            return -1;
+        }
+        if (!admin && !claimToRename.hasPermission(context.getSource().getPlayer().getUuid(), Claim.Permission.MODIFY)) {
+            context.getSource().sendError(new LiteralText("You don't have permission to modify claim properties!"));
+            return -1;
+        }
+        ClaimManager.INSTANCE.claimsByName.remove(name);
+        claimToRename.name = newName;
+        ClaimManager.INSTANCE.addClaim(claimToRename);
+        claimToRename.name = newName;
+        context.getSource().sendFeedback(new LiteralText("Renamed Claim " + name + " to " + newName).formatted(Formatting.GOLD), admin);
+        return -1;
     }
 }
