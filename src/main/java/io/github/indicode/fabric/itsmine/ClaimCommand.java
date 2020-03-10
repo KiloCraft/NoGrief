@@ -988,7 +988,7 @@ public class ClaimCommand {
                 .append(new LiteralText("[ACCEPT OWNERSHIP]").setStyle(new Style()
                         .setColor(Formatting.GREEN)
                         .setBold(true)
-                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/claim transfer -accept-" + claim.name + " " + player.getName() + " confirm")))));
+                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/claim transfer -accept-" + claim.name + " " + player.getEntityName() + " confirm")))));
         pendingClaimTransfers.put(player.getGameProfile().getId(), claim.name);
         return 0;
     }

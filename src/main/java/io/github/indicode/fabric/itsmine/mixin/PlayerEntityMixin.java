@@ -61,8 +61,8 @@ public abstract class PlayerEntityMixin extends LivingEntity implements ClaimSho
         }
     }
 
-    @Inject(method = "onDeath", at = @At(value = "HEAD", target = "Lnet/minecraft/entity/player/PlayerEntity;dropInventory()V"))
-    public void keepMyInventory(DamageSource source, CallbackInfo ci) {
+    @Inject(method = "dropInventory", cancellable = true, at = @At(value = "HEAD", target = "Lnet/minecraft/entity/player/PlayerEntity;dropInventory()V"))
+    public void keepMyInventory(CallbackInfo ci) {
         if (this.world.getGameRules().getBoolean(GameRules.KEEP_INVENTORY))
             return;
 
