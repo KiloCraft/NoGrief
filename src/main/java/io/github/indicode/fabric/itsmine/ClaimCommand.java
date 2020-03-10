@@ -49,7 +49,7 @@ public class ClaimCommand {
             throw new SimpleCommandExceptionType(Messages.INVALID_CLAIM).create();
         }
 
-        if (!admin && claim.claimBlockOwner != player.getUuid()) {
+        if (!admin && claim.permissionManager.hasPermission(player.getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
             throw new SimpleCommandExceptionType(Messages.NO_PERMISSION).create();
         }
     }
@@ -101,6 +101,10 @@ public class ClaimCommand {
         for (Claim.ClaimSettings.Setting value : Claim.ClaimSettings.Setting.values()) {
             strings.add(value.id);
         }
+        return CommandSource.suggestMatching(strings, builder);
+    };
+    public static final SuggestionProvider<ServerCommandSource> PERMISSIONS_PROVIDER = (source, builder) -> {
+        List<String> strings = new ArrayList<>();
         for (Claim.Permission value : Claim.Permission.values()) {
             strings.add(value.id);
         }
@@ -409,21 +413,7 @@ public class ClaimCommand {
             command.then(list);
         }
         createExceptionCommand(command, false);
-        {
-            LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
-            RequiredArgumentBuilder<ServerCommandSource, String> id = CommandManager.argument("setting", StringArgumentType.word()).suggests(SETTINGS_PROVIDER);
-            RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
 
-            id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, false));
-            set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, BoolArgumentType.getBool(context, "set")));
-            claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), true, BoolArgumentType.getBool(context, "set")));
-
-            set.then(claim);
-            id.then(set);
-            settings.then(claim);
-            command.then(settings);
-        }
         {
             LiteralArgumentBuilder<ServerCommandSource> admin = CommandManager.literal("admin");
             admin.requires(PERMISSION_CHECK_ADMIN);
@@ -548,7 +538,7 @@ public class ClaimCommand {
                 admin.then(set);
             }
             {
-                LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("destroy");
+                LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("remove");
                 delete.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify", 4));
                 RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
                 LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
@@ -690,10 +680,44 @@ public class ClaimCommand {
     }
 
     private static void createExceptionCommand(LiteralArgumentBuilder<ServerCommandSource> command, boolean admin) {
+        {
+            LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
+            RequiredArgumentBuilder<ServerCommandSource, String> id = CommandManager.argument("setting", StringArgumentType.word()).suggests(SETTINGS_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
+
+            id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, false, admin));
+            set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, BoolArgumentType.getBool(context, "set"), admin));
+            claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), true, BoolArgumentType.getBool(context, "set"), admin));
+
+            set.then(claim);
+            id.then(set);
+            settings.then(id);
+            command.then(settings);
+        }
+
         LiteralArgumentBuilder<ServerCommandSource> exceptions = CommandManager.literal("permissions");
         if (admin) exceptions.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_permissions", 2));
         RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
         LiteralArgumentBuilder<ServerCommandSource> playerLiteral = CommandManager.literal("player");
+        LiteralArgumentBuilder<ServerCommandSource> globalLiteral = CommandManager.literal("global");
+        {
+            RequiredArgumentBuilder<ServerCommandSource, String> permission = CommandManager.argument("permission", StringArgumentType.word()).suggests(PERMISSIONS_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
+
+            permission.executes((context) -> executePermission(context.getSource(),
+                            StringArgumentType.getString(context, "permission"),
+                            StringArgumentType.getString(context, "claim"),
+                            true, false, admin));
+
+            permission.executes((context) -> executePermission(context.getSource(),
+                    StringArgumentType.getString(context, "permission"),
+                    StringArgumentType.getString(context, "claim"),
+                    false, BoolArgumentType.getBool(context, "set"), admin));
+
+            permission.then(set);
+            globalLiteral.then(permission);
+        }
         {
             RequiredArgumentBuilder<ServerCommandSource, EntitySelector> player = CommandManager.argument("player", EntityArgumentType.player());
             LiteralArgumentBuilder<ServerCommandSource> remove = CommandManager.literal("remove");
@@ -794,6 +818,7 @@ public class ClaimCommand {
             }
             groupLiteral.then(group);
         }
+        claim.then(globalLiteral);
         claim.then(playerLiteral);
         claim.then(groupLiteral);
         exceptions.then(claim);
@@ -974,7 +999,7 @@ public class ClaimCommand {
     private static int checkPlayer(ServerCommandSource ret, UUID player) throws CommandSyntaxException {
         int blocks = ClaimManager.INSTANCE.getClaimBlocks(player);
         ret.sendFeedback(new LiteralText((ret.getPlayer().getGameProfile().getId().equals(player) ? "You have " : "They have ") + ClaimManager.INSTANCE.getClaimBlocks(player) + " blocks left").setStyle(new Style()
-                .setColor(Formatting.YELLOW).setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText("Area of " + ItsMine.blocksToAreaString(blocks)).formatted(Formatting.YELLOW)))), false);
+                .setColor(Formatting.YELLOW)), false);
         return 0;
     }
     private static int requestDelete(ServerCommandSource sender, Claim claim, boolean admin) throws CommandSyntaxException {
@@ -1380,7 +1405,7 @@ public class ClaimCommand {
                 , false);
         return 1;
     }
-    private static int executeSetting(ServerCommandSource source, String input, @Nullable String claimName, boolean isSet, boolean value) throws CommandSyntaxException {
+    private static int executeSetting(ServerCommandSource source, String input, @Nullable String claimName, boolean isQuery, boolean value, boolean admin) throws CommandSyntaxException {
         ServerPlayerEntity player = source.getPlayer();
         Claim claim1 = claimName == null ? ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension) :
                 ClaimManager.INSTANCE.claimsByName.get(claimName);
@@ -1389,38 +1414,48 @@ public class ClaimCommand {
             return -1;
         }
 
-        if (!claim1.permissionManager.hasPermission(source.getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
-            source.sendError(Messages.NO_PERMISSION);
-            return -1;
-        }
-
+        validateCanAccess(player, claim1, admin);
         Claim.ClaimSettings.Setting setting = Claim.ClaimSettings.Setting.byId(input);
-        Claim.Permission permission = Claim.Permission.byId(input);
 
-        if (setting != null && permission == null)
-            return isSet ? setSetting(source, claim1, setting, value) : querySetting(source, claim1, setting);
-        else if (setting == null && permission != null)
-            return isSet ? setPermission(source, claim1, permission, value) : queryPermission(source, claim1, permission);
+        if (setting != null)
+            return !isQuery ? setSetting(source, claim1, setting, value) : querySetting(source, claim1, setting);
 
         source.sendError(Messages.INVALID_SETTING);
         return -1;
     }
-    private static int querySetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting) throws CommandSyntaxException {
+    private static int executePermission(ServerCommandSource source, String input, @Nullable String claimName, boolean isQuery, boolean value, boolean admin) throws CommandSyntaxException {
+        ServerPlayerEntity player = source.getPlayer();
+        Claim claim1 = claimName == null ? ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension) :
+                ClaimManager.INSTANCE.claimsByName.get(claimName);
+        if (claim1 == null) {
+            source.sendError(Messages.INVALID_CLAIM);
+            return -1;
+        }
+
+        validateCanAccess(player, claim1, admin);
+        Claim.Permission permission = Claim.Permission.byId(input);
+        if (permission != null)
+            return !isQuery ? setPermission(source, claim1, permission, value) : queryPermission(source, claim1, permission);
+
+        source.sendError(Messages.INVALID_SETTING);
+        return -1;
+    }
+    private static int querySetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting) {
         boolean enabed = claim.settings.settings.get(setting);
         source.sendFeedback(new LiteralText(ChatColor.translate("&eSetting \"&6" +  setting.name + "&e\" is set to " + (enabed ? "&a" : "&c") + enabed)), false);
         return 1;
     }
-    private static int setSetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting, boolean set) throws CommandSyntaxException {
+    private static int setSetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting, boolean set) {
         claim.settings.settings.put(setting, set);
         source.sendFeedback(new LiteralText(ChatColor.translate("&eSet Setting \"&6" +  setting.name + "&e\" to " + (set ? "&a" : "&c") + set)), false);
         return 0;
     }
-    private static int queryPermission(ServerCommandSource source, Claim claim, Claim.Permission permission) throws CommandSyntaxException {
+    private static int queryPermission(ServerCommandSource source, Claim claim, Claim.Permission permission) {
         boolean defaultPerm = claim.permissionManager.defaults.hasPermission(permission);
         source.sendFeedback(new LiteralText("Players" + (defaultPerm ? " do" : " does not") + " have the permission " + permission.name).formatted(Formatting.YELLOW), false);
         return 1;
     }
-    private static int setPermission(ServerCommandSource source, Claim claim, Claim.Permission permission, boolean set) throws CommandSyntaxException {
+    private static int setPermission(ServerCommandSource source, Claim claim, Claim.Permission permission, boolean set) {
         claim.permissionManager.defaults.setPermission(permission, set);
         source.sendFeedback(new LiteralText("Players" + (set ? " do" : " does not") + " have the permission " + permission.name).formatted(Formatting.YELLOW), false);
         return 1;
