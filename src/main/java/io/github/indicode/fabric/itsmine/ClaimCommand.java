@@ -59,7 +59,7 @@ public class ClaimCommand {
     }
 
     private static Predicate<ServerCommandSource> perm(String str) {
-        return source -> Thimble.hasPermissionOrOp(source, "itsmine." + str, 2);
+        return perm(str, 2);
     }
     private static Predicate<ServerCommandSource> perm(String str, int op) {
         return source -> Thimble.hasPermissionOrOp(source, "itsmine." + str, op);
@@ -72,6 +72,7 @@ public class ClaimCommand {
     public static final SuggestionProvider<ServerCommandSource> DIRECTION_SUGGESTION_BUILDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
         for (Direction direction: Direction.values()) {
+            if (Config.claims2d && (direction == Direction.DOWN || direction == Direction.UP)) continue;
             strings.add(direction.getName());
         };
         return CommandSource.suggestMatching(strings, builder);
@@ -1083,7 +1084,7 @@ public class ClaimCommand {
             }
         }
         sender.sendFeedback(new LiteralText("").append(new LiteralText("Are you sure you want to transfer ownership of \"" + claim.name + "\" to " + player.getGameProfile().getName() + "? ").formatted(Formatting.GOLD))
-                .append(new LiteralText("[I'M SURE]").setStyle(new Style()
+                .append(new LiteralText("[YES]").setStyle(new Style()
                         .setColor(Formatting.DARK_RED)
                         .setBold(true)
                         .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, (admin ? "/claim admin" : "/claim") + " transfer " + claim.name + " " + player.getGameProfile().getName() + " confirm")))), false);
@@ -1107,7 +1108,7 @@ public class ClaimCommand {
         GameProfile profile = sender.getWorld().getServer().getUserCache().getByUuid(claim.claimBlockOwner);
         sender.sendFeedback(new LiteralText("Transferring ownership of the claim \"" + claim.name + "\" to " + player.getGameProfile().getName() + " if they accept").formatted(Formatting.GREEN), claim.claimBlockOwner != player.getGameProfile().getId());
         player.sendMessage(new LiteralText("").append(new LiteralText("Do you want to accept ownership of the claim \"" + claim.name + "\" from " + profile == null ? "Not Present" : profile.getName() + "? ").formatted(Formatting.GOLD))
-                .append(new LiteralText("[ACCEPT OWNERSHIP]").setStyle(new Style()
+                .append(new LiteralText("[ACCEPT]").setStyle(new Style()
                         .setColor(Formatting.GREEN)
                         .setBold(true)
                         .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/claim transfer -accept-" + claim.name + " " + player.getEntityName() + " confirm")))));
