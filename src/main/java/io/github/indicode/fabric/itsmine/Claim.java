@@ -9,6 +9,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.dimension.DimensionType;
 
+import java.security.MessageDigest;
 import java.util.*;
 
 /**
@@ -504,6 +505,28 @@ public class Claim {
                 if (setting == null) return;
                 this.settings.put(setting, tag.getBoolean(key));
             });
+        }
+    }
+    public enum MessageEvent {
+        ENTER_CLAIM("enter", Config.msg_enter_default),
+        LEAVE_CLAIM("leave", Config.msg_leave_default);
+
+        String id;
+        String defaultValue;
+        MessageEvent(String id, String defaultValue) {
+            this.id = id;
+            this.defaultValue = defaultValue;
+        }
+
+        @Nullable
+        public static MessageEvent getById(String id) {
+            for (MessageEvent value : values()) {
+                if (value.id.equalsIgnoreCase(id)) {
+                    return value;
+                }
+            }
+
+            return null;
         }
     }
 }

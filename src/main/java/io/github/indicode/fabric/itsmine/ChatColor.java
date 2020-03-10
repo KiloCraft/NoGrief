@@ -1,7 +1,6 @@
 package io.github.indicode.fabric.itsmine;
 
 import com.google.common.collect.Maps;
-import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -9,7 +8,6 @@ import org.apache.commons.lang3.Validate;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.kilocraft.essentials.commands.CmdUtils;
 
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -199,33 +197,6 @@ public enum ChatColor {
     }
 
     /**
-     * Gets the color represented by the specified color code
-     *
-     * @param code Code to check
-     * @return Associative {@link org.kilocraft.essentials.api} with the given code,
-     *     or null if it doesn't exist
-     */
-    @Nullable
-    public static ChatColor getByChar(char code) {
-        return BY_CHAR.get(code);
-    }
-
-    /**
-     * Gets the color represented by the specified color code
-     *
-     * @param code Code to check
-     * @return Associative {@link org.kilocraft.essentials.api} with the given code,
-     *     or null if it doesn't exist
-     */
-    @Nullable
-    public static ChatColor getByChar(@NotNull String code) {
-        Validate.notNull(code, "Code cannot be null");
-        Validate.isTrue(code.length() > 0, "Code must have at least one char");
-
-        return BY_CHAR.get(code.charAt(0));
-    }
-
-    /**
      * Strips the given message of all color codes
      *
      * @param input String to strip of color
@@ -297,20 +268,6 @@ public enum ChatColor {
         return new LiteralText(translateAlternateColorCodes(altColorChar, textToTranslate));
     }
 
-    public static String removeAlternateColorCodes(@NotNull String textToTranslate, char... chars) {
-        Validate.notNull(textToTranslate, "Cannot translate null text");
-        String string = "";
-        for (char aChar : chars) {
-            string = removeAlternateColorCodes(aChar, string);
-        }
-
-        for (LoggerFormats s : LoggerFormats.values()) {
-            string = string.replace(s.getCode(), "");
-        }
-
-        return string;
-    }
-
     public static String removeAlternateColorCodes(char altColorChar, @NotNull String textToTranslate) {
         Validate.notNull(textToTranslate, "Cannot translate null text");
         for (char c : "0123456789AaBbCcDdEeFfKkLlMmNnOoRr".toCharArray()) {
@@ -324,34 +281,9 @@ public enum ChatColor {
         return new LiteralText(removeAlternateColorCodes(altColorChar, textToTranslate));
     }
 
-    public static void sendToUniversalSource(ServerCommandSource source, String text, boolean log) {
-        LiteralText literalText;
-        if (CmdUtils.isConsole(source)) {
-            literalText = new LiteralText(removeAlternateColorCodes('&', text));
-        } else {
-            literalText = new LiteralText(translateAlternateColorCodes('&', text));
-        }
-
-        source.sendFeedback(literalText, log);
-    }
-
-    public static void sendToUniversalSource(char altColorChar, ServerCommandSource source, String text, boolean log) {
-        LiteralText literalText;
-        if (CmdUtils.isConsole(source)) {
-            literalText = new LiteralText(removeAlternateColorCodes(altColorChar, text));
-        } else {
-            literalText = new LiteralText(translateAlternateColorCodes(altColorChar, text));
-        }
-
-        source.sendFeedback(literalText, log);
-    }
-
-    public static void sendToUniversalSource(ServerCommandSource source, LiteralText text, boolean log) {
-        sendToUniversalSource(source, text.asString(), log);
-    }
-
-    public static void sendToSource(ServerCommandSource source, boolean log, String text, Object... objects) {
-        sendToUniversalSource(source, String.format(text, objects), log);
+    @Nullable
+    public static ChatColor getByChar(char code) {
+        return BY_CHAR.get(code);
     }
 
     /**

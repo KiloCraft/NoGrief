@@ -1,8 +1,6 @@
 package io.github.indicode.fabric.itsmine.mixin;
 
-import io.github.indicode.fabric.itsmine.Claim;
-import io.github.indicode.fabric.itsmine.ClaimManager;
-import io.github.indicode.fabric.itsmine.Functions;
+import io.github.indicode.fabric.itsmine.*;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
@@ -11,6 +9,7 @@ import net.minecraft.sound.SoundEvent;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Texts;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -23,6 +22,9 @@ public abstract class EntityMixin {
     @Shadow public World world;
 
     @Shadow public int timeUntilRegen;
+
+    @Shadow public abstract double offsetX(double widthScale);
+
     private Claim pclaim = null;
     @Inject(method = "setPos", at = @At("HEAD"))
     public void doPrePosActions(double x, double y, double z, CallbackInfo ci) {
@@ -39,12 +41,23 @@ public abstract class EntityMixin {
             if (player.getSenseCenterPos() == null) return;
             Claim claim = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.world.dimension.getType());
             if (pclaim != claim && player instanceof ServerPlayerEntity) {
-                ServerPlayerEntity serverPlayerEntity = (ServerPlayerEntity)player;
+                ServerPlayerEntity serverPlayerEntity = (ServerPlayerEntity) player;
                 if (serverPlayerEntity.networkHandler != null) {
-                    serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText("Now " + (claim == null ? "leaving" : "entering") + " claim ").formatted(Formatting.YELLOW).append(new LiteralText(claim == null ? pclaim.name : claim.name).formatted(Formatting.GOLD))));
+                    String message = null;
+                    if (claim == null && pclaim != null) message = getFormattedEventMessage(player, pclaim, false);
+                    else if (claim != null && pclaim == null) message = getFormattedEventMessage(player, claim, true);
+
+                    if (message != null)
+                        serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText(ChatColor.translate(message))));
                 }
             }
         }
+    }
+
+    private String getFormattedEventMessage(PlayerEntity player, Claim claim, boolean enter) {
+        String str = enter ? claim.enterMessage : claim.enterMessage;
+        return  ChatColor.translate(str == null ? (enter ? Config.msg_enter_default : Config.msg_leave_default) : str).replace("%claim%", claim.name)
+                .replace("%player%", player.getEntityName());
     }
 
     private int tick = 0;

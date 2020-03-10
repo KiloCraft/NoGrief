@@ -11,6 +11,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import io.github.indicode.fabric.itsmine.mixin.BlockUpdatePacketMixin;
 import io.github.indicode.fabric.permissions.Thimble;
@@ -43,6 +44,20 @@ import java.util.function.Predicate;
  * @author Indigo Amann
  */
 public class ClaimCommand {
+    private static void validateCanAccess(ServerPlayerEntity player, Claim claim, boolean admin) throws CommandSyntaxException {
+        if (claim == null) {
+            throw new SimpleCommandExceptionType(Messages.INVALID_CLAIM).create();
+        }
+
+        if (!admin && claim.claimBlockOwner != player.getUuid()) {
+            throw new SimpleCommandExceptionType(Messages.NO_PERMISSION).create();
+        }
+    }
+
+    private static RequiredArgumentBuilder<ServerCommandSource, String> getClaimArgument() {
+        return CommandManager.argument("claim", StringArgumentType.word()).suggests(CLAIM_PROVIDER);
+    }
+
     private static Predicate<ServerCommandSource> perm(String str) {
         return source -> Thimble.hasPermissionOrOp(source, "itsmine." + str, 2);
     }
@@ -73,6 +88,14 @@ public class ClaimCommand {
         }
         return CommandSource.suggestMatching(names, builder);
     };
+    public static final SuggestionProvider<ServerCommandSource> MESSAGE_EVENT_PROVIDER = (source, builder) -> {
+        List<String> strings = new ArrayList<>();
+        for (Claim.MessageEvent value : Claim.MessageEvent.values()) {
+            strings.add(value.id);
+        }
+        return CommandSource.suggestMatching(strings, builder);
+    };
+
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         LiteralArgumentBuilder<ServerCommandSource> command = CommandManager.literal("claim");
         {
@@ -123,10 +146,34 @@ public class ClaimCommand {
             command.then(rename);
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> trusted = CommandManager.literal("trusted");
-            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
-                    .suggests(CLAIM_PROVIDER);
+            LiteralArgumentBuilder<ServerCommandSource> message = CommandManager.literal("message");
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
+            RequiredArgumentBuilder<ServerCommandSource, String> messageEvent = CommandManager.argument("messageEvent", StringArgumentType.word())
+                    .suggests(MESSAGE_EVENT_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, String> messageArgument = CommandManager.argument("message", StringArgumentType.greedyString());
 
+            message.executes(context -> {
+                ServerPlayerEntity player = context.getSource().getPlayer();
+                Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
+                validateCanAccess(player, claim, PERMISSION_CHECK_ADMIN.test(context.getSource()));
+                Claim.MessageEvent event = Claim.MessageEvent.getById(StringArgumentType.getString(context, "messageEvent"));
+
+                if (event == null) {
+                    context.getSource().sendError(Messages.INVALID_MESSAGE_EVENT);
+                    return -1;
+                }
+
+                return setEventMessage(context.getSource(), claim, event, StringArgumentType.getString(context, "message"));
+            });
+
+            messageEvent.then(messageArgument);
+            claimArgument.then(messageEvent);
+            message.then(claimArgument);
+            command.then(messageArgument);
+        }
+        {
+            LiteralArgumentBuilder<ServerCommandSource> trusted = CommandManager.literal("trusted");
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
             trusted.executes((context)-> {
                 ServerPlayerEntity player = context.getSource().getPlayer();
                 Claim claim = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension);
@@ -187,7 +234,7 @@ public class ClaimCommand {
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("remove");
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
             claim.suggests(CLAIM_PROVIDER);
             LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
             confirm.executes(context -> delete(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), false));
@@ -253,8 +300,7 @@ public class ClaimCommand {
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("remove");
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-            claim.suggests(CLAIM_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
             LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
             confirm.executes(context -> delete(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), false));
             claim.executes(context -> requestDelete(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), false));
@@ -275,7 +321,7 @@ public class ClaimCommand {
                 String claimName = input.replace(string, "");
                 Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(claimName);
                 if (claim1 == null) {
-                    context.getSource().sendError(new LiteralText("Can't find a claim with that Name!"));
+                    context.getSource().sendError(Messages.INVALID_CLAIM);
                     return -1;
                 }
 
@@ -294,8 +340,7 @@ public class ClaimCommand {
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> info = CommandManager.literal("info");
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-            claim.suggests(CLAIM_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
             info.executes(context -> info(
                     context.getSource(),
                     ClaimManager.INSTANCE.getClaimAt(new BlockPos(context.getSource().getPosition()), context.getSource().getWorld().getDimension().getType())
@@ -320,8 +365,7 @@ public class ClaimCommand {
         createExceptionCommand(command, false);
         {
             LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("flags");
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-            claim.suggests(CLAIM_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
             for (Claim.ClaimSettings.Setting setting: Claim.ClaimSettings.Setting.values()) {
                 LiteralArgumentBuilder<ServerCommandSource> arg = CommandManager.literal(setting.id);
                 arg.executes(context -> {
@@ -479,8 +523,7 @@ public class ClaimCommand {
             {
                 LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("destroy");
                 delete.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify", 4));
-                RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-                claim.suggests(CLAIM_PROVIDER);
+                RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
                 LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
                 confirm.executes(context -> delete(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), true));
                 claim.executes(context -> requestDelete(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), true));
@@ -622,8 +665,7 @@ public class ClaimCommand {
     private static void createExceptionCommand(LiteralArgumentBuilder<ServerCommandSource> command, boolean admin) {
         LiteralArgumentBuilder<ServerCommandSource> exceptions = CommandManager.literal("permissions");
         if (admin) exceptions.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_permissions", 2));
-        RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-        claim.suggests(CLAIM_PROVIDER);
+        RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
         LiteralArgumentBuilder<ServerCommandSource> playerLiteral = CommandManager.literal("player");
         {
             RequiredArgumentBuilder<ServerCommandSource, EntitySelector> player = CommandManager.argument("player", EntityArgumentType.player());
@@ -1179,7 +1221,7 @@ public class ClaimCommand {
         String newName = StringArgumentType.getString(context, "name");
         Claim claimToRename = ClaimManager.INSTANCE.claimsByName.get(name);
         if (claimToRename == null) {
-            context.getSource().sendError(new LiteralText("Can't find a claim with that Name!"));
+            context.getSource().sendError(Messages.INVALID_CLAIM);
             return -1;
         }
         if (ClaimManager.INSTANCE.claimsByName.containsKey(newName)) {
@@ -1260,8 +1302,29 @@ public class ClaimCommand {
         return 1;
     }
     private static int setOwnerName(ServerCommandSource source, Claim claim, String name) {
-        source.sendFeedback(new LiteralText("Set the Custom Owner Name to " + name + " from " + (claim.customOwnerName == null ? "Not Present" : claim.customOwnerName) + " for " + claim.name), true);
+        source.sendFeedback(new LiteralText("Set the Custom Owner Name to ")
+                .formatted(Formatting.YELLOW).append(new LiteralText(name).formatted(Formatting.GOLD)).append(new LiteralText(" from "))
+                        .append(new LiteralText(claim.customOwnerName == null ? "Not Present" : claim.customOwnerName).formatted(Formatting.GOLD))
+                        .append(new LiteralText(" for ").formatted(Formatting.YELLOW)).append(new LiteralText(claim.name).formatted(Formatting.GOLD))
+                , false);
         claim.customOwnerName = name;
         return 1;
     }
+    private static int setEventMessage(ServerCommandSource source, Claim claim, Claim.MessageEvent event, String message) {
+        switch (event) {
+            case ENTER_CLAIM:
+                claim.enterMessage = ChatColor.translate(message);
+            case LEAVE_CLAIM:
+                claim.leaveMessage = ChatColor.translate(message);
+        }
+
+        source.sendFeedback(new LiteralText("Set ").append(new LiteralText(event.id).formatted(Formatting.GOLD)
+                        .append(new LiteralText(" Event Message for claim ").formatted(Formatting.YELLOW))
+                        .append(new LiteralText(claim.name).formatted(Formatting.GOLD)).append(new LiteralText(" to:").formatted(Formatting.YELLOW)))
+                        .append("\n").append(new LiteralText(ChatColor.translate(message)))
+                        .formatted(Formatting.YELLOW)
+                , false);
+        return 1;
+    }
+
 }
