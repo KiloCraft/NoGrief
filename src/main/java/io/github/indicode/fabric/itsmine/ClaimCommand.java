@@ -49,7 +49,7 @@ public class ClaimCommand {
             throw new SimpleCommandExceptionType(Messages.INVALID_CLAIM).create();
         }
 
-        if (!admin && claim.permissionManager.hasPermission(player.getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
+        if (!admin && !claim.permissionManager.hasPermission(player.getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
             throw new SimpleCommandExceptionType(Messages.NO_PERMISSION).create();
         }
     }
@@ -139,7 +139,8 @@ public class ClaimCommand {
     };
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        LiteralArgumentBuilder<ServerCommandSource> command = CommandManager.literal("claim");
+        LiteralArgumentBuilder<ServerCommandSource> command = CommandManager.literal("claim")
+                .executes(ClaimCommand::execute);
         {
             LiteralArgumentBuilder<ServerCommandSource> create = CommandManager.literal("create");
             RequiredArgumentBuilder<ServerCommandSource, String> name = CommandManager.argument("name", StringArgumentType.word());
@@ -679,6 +680,12 @@ public class ClaimCommand {
         dispatcher.register(command);
     }
 
+    private static int execute(CommandContext<ServerCommandSource> context) {
+
+
+        return 1;
+    }
+
     private static void createExceptionCommand(LiteralArgumentBuilder<ServerCommandSource> command, boolean admin) {
         {
             LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
@@ -686,9 +693,9 @@ public class ClaimCommand {
             RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
             RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
 
-            id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, false, admin));
-            set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, BoolArgumentType.getBool(context, "set"), admin));
-            claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), true, BoolArgumentType.getBool(context, "set"), admin));
+            id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, false, admin));
+            set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, BoolArgumentType.getBool(context, "set"), admin));
+            claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), false, BoolArgumentType.getBool(context, "set"), admin));
 
             set.then(claim);
             id.then(set);
@@ -710,7 +717,7 @@ public class ClaimCommand {
                             StringArgumentType.getString(context, "claim"),
                             true, false, admin));
 
-            permission.executes((context) -> executePermission(context.getSource(),
+            set.executes((context) -> executePermission(context.getSource(),
                     StringArgumentType.getString(context, "permission"),
                     StringArgumentType.getString(context, "claim"),
                     false, BoolArgumentType.getBool(context, "set"), admin));
@@ -1208,10 +1215,11 @@ public class ClaimCommand {
                 nextDisabled = !nextDisabled;
             }
 
-            claimFlags.append(new LiteralText(value.id).formatted(formatting)).append(" ");
+            claimFlags.append(" ").append(new LiteralText(value.id).formatted(formatting));
         }
 
-        text.append(newInfoLine("Flags", claimFlags));
+        text.append(new LiteralText("").append(new LiteralText("* Flags:").formatted(Formatting.YELLOW))
+                .append(claimFlags).append("\n"));
         Text pos = new LiteralText("");
         Text min = newPosLine(claim.min, Formatting.AQUA, Formatting.DARK_AQUA);
         Text max = newPosLine(claim.max, Formatting.LIGHT_PURPLE, Formatting.DARK_PURPLE);
@@ -1417,6 +1425,10 @@ public class ClaimCommand {
         validateCanAccess(player, claim1, admin);
         Claim.ClaimSettings.Setting setting = Claim.ClaimSettings.Setting.byId(input);
 
+        System.out.println(setting);
+        System.out.println(claim1);
+
+
         if (setting != null)
             return !isQuery ? setSetting(source, claim1, setting, value) : querySetting(source, claim1, setting);
 
@@ -1441,13 +1453,13 @@ public class ClaimCommand {
         return -1;
     }
     private static int querySetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting) {
-        boolean enabed = claim.settings.settings.get(setting);
-        source.sendFeedback(new LiteralText(ChatColor.translate("&eSetting \"&6" +  setting.name + "&e\" is set to " + (enabed ? "&a" : "&c") + enabed)), false);
+        boolean enabled = claim.settings.settings.get(setting);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSetting &6" + setting.name + " is set to " + (enabled ? "&a" : "&c") + enabled + "&e for " + claim.name)), false);
         return 1;
     }
     private static int setSetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting, boolean set) {
         claim.settings.settings.put(setting, set);
-        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet Setting \"&6" +  setting.name + "&e\" to " + (set ? "&a" : "&c") + set)), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet setting &6" + setting.name + " to " + (set ? "&a" : "&c") + set + "&e for " + claim.name)), false);
         return 0;
     }
     private static int queryPermission(ServerCommandSource source, Claim claim, Claim.Permission permission) {
