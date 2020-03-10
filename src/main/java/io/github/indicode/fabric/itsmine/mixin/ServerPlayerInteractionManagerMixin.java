@@ -73,13 +73,13 @@ public class ServerPlayerInteractionManagerMixin {
                             (stack.getItem() instanceof BucketItem && claim.hasPermission(uuid, Claim.Permission.PLACE_BREAK))
             ) return false;
             if (stack.getItem() instanceof BlockItem) {
-                playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText("You cannot place blocks in this claim").formatted(Formatting.RED)).append(new LiteralText("(Use /claim show to see an outline)").formatted(Formatting.YELLOW)));
+                playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_place_block).formatted(Formatting.RED)));
             }
             if (stack.getItem() instanceof BucketItem) {
                 if (!Functions.isBucketEmpty((BucketItem) stack.getItem())) {
-                    playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText("You cannot pick up fluids in this claim").formatted(Formatting.RED)).append(new LiteralText("(Use /claim show to see an outline)").formatted(Formatting.YELLOW)));
+                    playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_interact_block).formatted(Formatting.RED)));
                 } else {
-                    playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText("You cannot place fluids in this claim").formatted(Formatting.RED)).append(new LiteralText("(Use /claim show to see an outline)").formatted(Formatting.YELLOW)));
+                    playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_interact_block).formatted(Formatting.RED)));
                 }
             }
             return true;
@@ -111,7 +111,7 @@ public class ServerPlayerInteractionManagerMixin {
             if (
                     claim.hasPermission(uuid, Claim.Permission.PLACE_BREAK)
             ) return Functions.canPlayerActuallyModifyAt(world, player, pos);
-            player.sendMessage(new LiteralText("").append(new LiteralText("You cannot break blocks in this claim").formatted(Formatting.RED)).append(new LiteralText("(Use /claim show to see an outline)").formatted(Formatting.YELLOW)));
+            player.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_break_block).formatted(Formatting.RED)));
             return false;
         }
         return world.canPlayerModifyAt(player, pos);

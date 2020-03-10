@@ -23,7 +23,7 @@ public class Claim {
     public ClaimSettings settings = new ClaimSettings();
     public PermissionManager permissionManager = new PermissionManager();
     public UUID claimBlockOwner = null;
-    public String customOwnerName;
+    public String customOwnerName, enterMessage, leaveMessage;
     public Claim() {
 
     }
@@ -179,6 +179,12 @@ public class Claim {
             tag.put("permissions", permissionManager.toNBT());
             if (claimBlockOwner != null) tag.putUuid("top_owner", claimBlockOwner);
         }
+        {
+            CompoundTag meta = new CompoundTag();
+            if (this.enterMessage != null) meta.putString("enterMsg", this.enterMessage);
+            if (this.leaveMessage != null) meta.putString("leaveMsg", this.leaveMessage);
+            tag.put("meta", meta);
+        }
         if (this.customOwnerName != null) tag.putString("cOwnerName", this.customOwnerName);
         tag.putString("name", name);
         return tag;
@@ -212,6 +218,11 @@ public class Claim {
             permissionManager = new PermissionManager();
             permissionManager.fromNBT(tag.getCompound("permissions"));
             if (tag.containsUuid("top_owner")) claimBlockOwner = tag.getUuid("top_owner");
+        }
+        {
+            CompoundTag meta = tag.getCompound("meta");
+            if (meta.contains("enterMsg")) this.enterMessage = meta.getString("enterMsg");
+            if (meta.contains("leaveMsg")) this.leaveMessage = meta.getString("leaveMsg");
         }
         if (tag.contains("cOwnerName")) this.customOwnerName = tag.getString("cOwnerName");
         name = tag.getString("name");
