@@ -96,6 +96,16 @@ public class ClaimCommand {
         }
         return CommandSource.suggestMatching(strings, builder);
     };
+    public static final SuggestionProvider<ServerCommandSource> SETTINGS_PROVIDER = (source, builder) -> {
+        List<String> strings = new ArrayList<>();
+        for (Claim.ClaimSettings.Setting value : Claim.ClaimSettings.Setting.values()) {
+            strings.add(value.id);
+        }
+        for (Claim.Permission value : Claim.Permission.values()) {
+            strings.add(value.id);
+        }
+        return CommandSource.suggestMatching(strings, builder);
+    };
     public static final SuggestionProvider<ServerCommandSource> MESSAGE_EVENTS_PROVIDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
         for (Claim.MessageEvent value : Claim.MessageEvent.values()) {
@@ -401,78 +411,16 @@ public class ClaimCommand {
         createExceptionCommand(command, false);
         {
             LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
+            RequiredArgumentBuilder<ServerCommandSource, String> id = CommandManager.argument("setting", StringArgumentType.word()).suggests(SETTINGS_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
             RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
 
+            id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, false));
+            set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, BoolArgumentType.getBool(context, "set")));
+            claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), true, BoolArgumentType.getBool(context, "set")));
 
-
-            for (Claim.ClaimSettings.Setting setting: Claim.ClaimSettings.Setting.values()) {
-                LiteralArgumentBuilder<ServerCommandSource> arg = CommandManager.literal(setting.id);
-                arg.executes(context -> {
-                    Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (claim1 == null) {
-                        context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
-                        context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    context.getSource().sendFeedback(new LiteralText(setting.name + " is equal to " + claim1.settings.settings.get(setting)).formatted(Formatting.YELLOW), false);
-                    return 0;
-                });
-                RequiredArgumentBuilder<ServerCommandSource, ?> setter = CommandManager.argument("value", BoolArgumentType.bool());
-                setter.executes(context -> {
-                    Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (claim1 == null) {
-                        context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
-                        context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    claim1.settings.settings.put(setting, BoolArgumentType.getBool(context, "value"));
-                    context.getSource().sendFeedback(new LiteralText(setting.name + " is now equal to " + BoolArgumentType.getBool(context, "value")).formatted(Formatting.GREEN), false);
-                    return 0;
-                });
-                arg.then(setter);
-                claim.then(arg);
-            }
-            for (Claim.Permission value : Claim.Permission.values()) {
-                LiteralArgumentBuilder<ServerCommandSource> permNode = CommandManager.literal(value.id);
-                RequiredArgumentBuilder<ServerCommandSource, Boolean> allow = CommandManager.argument("allow", BoolArgumentType.bool());
-                allow.executes(context -> {
-                    Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (claim1 == null) {
-                        context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
-                        context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    boolean permission = BoolArgumentType.getBool(context, "allow");
-                    claim1.permissionManager.defaults.setPermission(value, permission);
-                    context.getSource().sendFeedback(new LiteralText("Players" + (permission ? " now" : " no longer") + " have the permission " + value.name).formatted(Formatting.YELLOW), false);
-                    return 0;
-                });
-                permNode.executes(context -> {
-                    Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (claim1 == null) {
-                        context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
-                        context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
-                        return 0;
-                    }
-                    boolean permission = claim1.permissionManager.defaults.hasPermission(value);
-                    context.getSource().sendFeedback(new LiteralText("Players" + (permission ? " do" : " does not") + " have the permission " + value.name).formatted(Formatting.YELLOW), false);
-                    return 0;
-                });
-                permNode.then(allow);
-                claim.then(permNode);
-            }
+            set.then(claim);
+            id.then(set);
             settings.then(claim);
             command.then(settings);
         }
@@ -1432,5 +1380,49 @@ public class ClaimCommand {
                 , false);
         return 1;
     }
+    private static int executeSetting(ServerCommandSource source, String input, @Nullable String claimName, boolean isSet, boolean value) throws CommandSyntaxException {
+        ServerPlayerEntity player = source.getPlayer();
+        Claim claim1 = claimName == null ? ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension) :
+                ClaimManager.INSTANCE.claimsByName.get(claimName);
+        if (claim1 == null) {
+            source.sendError(Messages.INVALID_CLAIM);
+            return -1;
+        }
 
+        if (!claim1.permissionManager.hasPermission(source.getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
+            source.sendError(Messages.NO_PERMISSION);
+            return -1;
+        }
+
+        Claim.ClaimSettings.Setting setting = Claim.ClaimSettings.Setting.byId(input);
+        Claim.Permission permission = Claim.Permission.byId(input);
+
+        if (setting != null && permission == null)
+            return isSet ? setSetting(source, claim1, setting, value) : querySetting(source, claim1, setting);
+        else if (setting == null && permission != null)
+            return isSet ? setPermission(source, claim1, permission, value) : queryPermission(source, claim1, permission);
+
+        source.sendError(Messages.INVALID_SETTING);
+        return -1;
+    }
+    private static int querySetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting) throws CommandSyntaxException {
+        boolean enabed = claim.settings.settings.get(setting);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSetting \"&6" +  setting.name + "&e\" is set to " + (enabed ? "&a" : "&c") + enabed)), false);
+        return 1;
+    }
+    private static int setSetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting, boolean set) throws CommandSyntaxException {
+        claim.settings.settings.put(setting, set);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet Setting \"&6" +  setting.name + "&e\" to " + (set ? "&a" : "&c") + set)), false);
+        return 0;
+    }
+    private static int queryPermission(ServerCommandSource source, Claim claim, Claim.Permission permission) throws CommandSyntaxException {
+        boolean defaultPerm = claim.permissionManager.defaults.hasPermission(permission);
+        source.sendFeedback(new LiteralText("Players" + (defaultPerm ? " do" : " does not") + " have the permission " + permission.name).formatted(Formatting.YELLOW), false);
+        return 1;
+    }
+    private static int setPermission(ServerCommandSource source, Claim claim, Claim.Permission permission, boolean set) throws CommandSyntaxException {
+        claim.permissionManager.defaults.setPermission(permission, set);
+        source.sendFeedback(new LiteralText("Players" + (set ? " do" : " does not") + " have the permission " + permission.name).formatted(Formatting.YELLOW), false);
+        return 1;
+    }
 }
