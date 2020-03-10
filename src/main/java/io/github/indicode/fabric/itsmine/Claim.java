@@ -250,8 +250,10 @@ public class Claim {
         OPEN_DOORS("open_doors", "Use Doors"),
         INTERACT_ENTITY("interact_entity", "Entity Interaction"),
         ENTITY_DAMAGE("entity_damage", "Hurt Entities"),
-        FLY("fly", "Fly"),
-        TELEPORT("teleport", "Player Teleport Access");
+        FLIGHT("flight", "Flight"),
+        TELEPORT("teleport", "Player Teleport Access"),
+        ENTER("enter", "Enter the Claim");
+
         String id, name;
         Permission(String id, String name) {
             this.id = id;
@@ -458,7 +460,7 @@ public class Claim {
     }
     public static class ClaimSettings{
         public enum Setting {
-            FLIGHT_ALLOWED("fly_enabled", "Flying Enabled", true),
+            FLIGHT_ALLOWED("flight_allowed", "Allow Flying", true),
             EXPLOSIONS("explosion_destruction", "Explosions Destroy Blocks", false),
             FLUID_CROSSES_BORDERS("fluid_crosses_borders", "Fluid Crosses Borders", false),
             FIRE_CROSSES_BORDERS("fire_crosses_borders", "Fire Crosses Borders", false),
@@ -475,6 +477,7 @@ public class Claim {
                 this.name =  name;
                 this.defaultValue = defaultValue;
             }
+            @Nullable
             public static ClaimSettings.Setting byId(String id) {
                 for (ClaimSettings.Setting permission: values()) {
                     if (permission.id.equals(id)) return permission;

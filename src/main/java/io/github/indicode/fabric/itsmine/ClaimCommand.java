@@ -16,7 +16,6 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import io.github.indicode.fabric.itsmine.mixin.BlockUpdatePacketMixin;
 import io.github.indicode.fabric.permissions.Thimble;
 import io.github.indicode.fabric.permissions.command.PermissionCommand;
-import io.github.voidpointerdev.minecraft.offlineinfo.OfflineInfo;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.command.CommandException;
@@ -88,6 +87,13 @@ public class ClaimCommand {
             }
         }
         return CommandSource.suggestMatching(names, builder);
+    };
+    public static final SuggestionProvider<ServerCommandSource> PLAYERS_PROVIDER = (source, builder) -> {
+        List<String> strings = new ArrayList<>();
+        for (ServerPlayerEntity player : source.getSource().getMinecraftServer().getPlayerManager().getPlayerList()) {
+            strings.add(player.getEntityName());
+        }
+        return CommandSource.suggestMatching(strings, builder);
     };
     public static final SuggestionProvider<ServerCommandSource> MESSAGE_EVENTS_PROVIDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
@@ -385,7 +391,7 @@ public class ClaimCommand {
             LiteralArgumentBuilder<ServerCommandSource> list = CommandManager.literal("list");
             RequiredArgumentBuilder<ServerCommandSource, String> player = CommandManager.argument("player", StringArgumentType.word());
             player.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.check_others", 2));
-            player.suggests(OfflineInfo.ONLINE_PROVIDER);
+            player.suggests(PLAYERS_PROVIDER);
             list.executes(context -> list(context.getSource(), null));
             player.executes(context -> list(context.getSource(), StringArgumentType.getString(context, "player")));
             list.then(player);
@@ -393,8 +399,11 @@ public class ClaimCommand {
         }
         createExceptionCommand(command, false);
         {
-            LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("flags");
+            LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
             RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
+
+
+
             for (Claim.ClaimSettings.Setting setting: Claim.ClaimSettings.Setting.values()) {
                 LiteralArgumentBuilder<ServerCommandSource> arg = CommandManager.literal(setting.id);
                 arg.executes(context -> {
@@ -1094,8 +1103,10 @@ public class ClaimCommand {
                 return 0;
             }
         }
+
+        GameProfile profile = sender.getWorld().getServer().getUserCache().getByUuid(claim.claimBlockOwner);
         sender.sendFeedback(new LiteralText("Transferring ownership of the claim \"" + claim.name + "\" to " + player.getGameProfile().getName() + " if they accept").formatted(Formatting.GREEN), claim.claimBlockOwner != player.getGameProfile().getId());
-        player.sendMessage(new LiteralText("").append(new LiteralText("Do you want to accept ownership of the claim \"" + claim.name + "\" from " + OfflineInfo.getNameById(sender.getWorld().getServer().getUserCache(), claim.claimBlockOwner) + "? ").formatted(Formatting.GOLD))
+        player.sendMessage(new LiteralText("").append(new LiteralText("Do you want to accept ownership of the claim \"" + claim.name + "\" from " + profile == null ? "Not Present" : profile.getName() + "? ").formatted(Formatting.GOLD))
                 .append(new LiteralText("[ACCEPT OWNERSHIP]").setStyle(new Style()
                         .setColor(Formatting.GREEN)
                         .setBold(true)
