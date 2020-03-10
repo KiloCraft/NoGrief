@@ -140,7 +140,12 @@ public class ClaimCommand {
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         LiteralArgumentBuilder<ServerCommandSource> command = CommandManager.literal("claim")
-                .executes(ClaimCommand::execute);
+                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, 1, "Get Started", "/claim %page%"));
+
+        RequiredArgumentBuilder<ServerCommandSource, Integer> pageArg = CommandManager.argument("page", IntegerArgumentType.integer(1, 4))
+                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, IntegerArgumentType.getInteger(context, "page"), "Get Started", "/claim %page%"));
+
+        command.then(pageArg);
         {
             LiteralArgumentBuilder<ServerCommandSource> create = CommandManager.literal("create");
             RequiredArgumentBuilder<ServerCommandSource, String> name = CommandManager.argument("name", StringArgumentType.word());
@@ -181,7 +186,8 @@ public class ClaimCommand {
         {
             LiteralArgumentBuilder<ServerCommandSource> help = CommandManager.literal("help");
             RequiredArgumentBuilder<ServerCommandSource, Integer> page = CommandManager.argument("page", IntegerArgumentType.integer(1, 5));
-
+            help.executes((context) -> sendPage(context.getSource(), Messages.HELP, 1, "Get Started", "/claim help %page%"));
+            page.executes((context) ->  sendPage(context.getSource(), Messages.HELP, IntegerArgumentType.getInteger(context, "page"), "Get Started", "/claim help %page%"));
             help.then(page);
             command.then(help);
         }
@@ -680,9 +686,50 @@ public class ClaimCommand {
         dispatcher.register(command);
     }
 
-    private static int execute(CommandContext<ServerCommandSource> context) {
+    private static int sendPage(ServerCommandSource source, Text[] text, int page, String title, String command) {
+        final String SEPARATOR = "-----------------------------------------------------";
+        Text header =  new LiteralText("")
+                .append(new LiteralText("- [ ").formatted(Formatting.GRAY))
+                .append(new LiteralText(title).formatted(Formatting.GOLD))
+                .append(" ] ")
+                .append(SEPARATOR.substring(ChatColor.removeAlternateColorCodes('&', title).length() + 4))
+                .formatted(Formatting.GRAY);
 
+        Text button_prev = new LiteralText("")
+                .append(new LiteralText("<-").formatted(Formatting.GRAY, Formatting.BOLD))
+                .append(" ").append(new LiteralText("Prev").formatted(Formatting.GOLD))
+                .setStyle(new Style()
+                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText(page - 1 == text.length ? "<<<" : "|<").formatted(Formatting.GRAY)))
+                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf((page + 1 == text.length) ? 1 : (page - 1 == 0 ? 1 : page - 1)))))
+                );
 
+        Text button_next = new LiteralText("")
+                .append(new LiteralText("Next").formatted(Formatting.GOLD))
+                .append(" ").append(new LiteralText("->").formatted(Formatting.GRAY, Formatting.BOLD)).append(" ")
+                .setStyle(new Style()
+                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText(page - 1 == text.length ? "<<<" : ">|").formatted(Formatting.GRAY)))
+                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf((page + 1 == text.length) ? 1 : (page + 1)))))
+                );
+
+        Text buttons = new LiteralText("")
+                .append(new LiteralText("[ ").formatted(Formatting.GRAY))
+                .append(button_prev)
+                .append(" ")
+                .append(
+                        new LiteralText(String.valueOf(page)).formatted(Formatting.GREEN)
+                        .append(new LiteralText("/").formatted(Formatting.GRAY))
+                        .append(new LiteralText(String.valueOf(text.length - 1)).formatted(Formatting.GREEN))
+                )
+                .append(" ")
+                .append(button_next)
+                .append(new LiteralText("] ").formatted(Formatting.GRAY));
+
+        Text footer = new LiteralText("- ")
+                .formatted(Formatting.GRAY)
+                .append(buttons).append(new LiteralText(" ------------------------------").formatted(Formatting.GRAY));
+
+        header.append("\n").append(text[page]).append("\n").append(footer);
+        source.sendFeedback(header, false);
         return 1;
     }
 

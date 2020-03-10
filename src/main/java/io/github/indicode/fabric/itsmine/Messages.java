@@ -36,7 +36,7 @@ public class Messages {
                     .append(line(2, "To check someone's permission, type ").append(text("/claim permissions <claim> player <player> <permission>").formatted(Formatting.GOLD)))
                     .append(line(3, "To see a list of trusted players, type ").append(text("/claim trusted").formatted(Formatting.GOLD))),
             header("How to Claim (Global Permissions)")
-                    .append(line("Global Permissions are just like player permissions and as the name suggests they are global").formatted(Formatting.LIGHT_PURPLE))
+                    .append(line("Global Permissions are just like player permissions and as the name suggests they are global").formatted(Formatting.LIGHT_PURPLE)).formatted(Formatting.RESET)
                     .append(line(1, "To set a global permission, type ").append(text("/claim permissions <claim> global <player> <permission> [true | false]").formatted(Formatting.GOLD)))
                     .append(line(2, "To check someone's permission, type ").append(text("/claim permissions <claim> global <player> <permission>").formatted(Formatting.GOLD)))
                     .append(line(3, "To see a list of trusted players, type ").append(text("/claim trusted").formatted(Formatting.GOLD))),
@@ -52,15 +52,15 @@ public class Messages {
     };
 
     private static Text header(String title) {
-        return new LiteralText(title + ":").formatted(Formatting.AQUA, Formatting.UNDERLINE).append("\n\n");
+        return new LiteralText("").append(new LiteralText(title + ":").formatted(Formatting.AQUA, Formatting.UNDERLINE)).formatted(Formatting.WHITE);
     }
 
     private static Text line(int num, String string) {
-        return line(num + ". " + string);
+        return line("&e" + num + ".&e " + string);
     }
 
     private static Text line(String string) {
-        return new LiteralText(ChatColor.translate(string)).formatted(Formatting.YELLOW).append("\n");
+        return new LiteralText("\n").append(ChatColor.translate(string)).formatted(Formatting.YELLOW);
     }
 
     private static Text text(String text) {
