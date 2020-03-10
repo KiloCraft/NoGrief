@@ -2,7 +2,6 @@ package io.github.indicode.fabric.itsmine;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -16,7 +15,6 @@ import io.github.indicode.fabric.itsmine.mixin.BlockUpdatePacketMixin;
 import io.github.indicode.fabric.permissions.Thimble;
 import io.github.indicode.fabric.permissions.command.PermissionCommand;
 import io.github.voidpointerdev.minecraft.offlineinfo.OfflineInfo;
-import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.command.CommandException;
@@ -25,22 +23,18 @@ import net.minecraft.command.arguments.BlockPosArgumentType;
 import net.minecraft.command.arguments.EntityArgumentType;
 import net.minecraft.command.arguments.PosArgument;
 import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.CommandSource;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.LiteralText;
-import net.minecraft.text.Style;
+import net.minecraft.text.*;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Pair;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author Indigo Amann
@@ -55,12 +49,13 @@ public class ClaimCommand {
     };
     public static final SuggestionProvider<ServerCommandSource> CLAIM_PROVIDER = (source, builder) -> {
         ServerPlayerEntity player = source.getSource().getPlayer();
-        List<Claim> claims = ClaimManager.INSTANCE.getPlayerClaims(player.getGameProfile().getId());
         List<String> names = new ArrayList<>();
         Claim current = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension);
         if (current != null) names.add(current.name);
-        for (Claim claim : claims) {
-            names.add(claim.name);
+        for (Claim claim : ClaimManager.INSTANCE.getPlayerClaims(player.getGameProfile().getId())) {
+            if (claim != null) {
+                names.add(claim.name);
+            }
         }
         return CommandSource.suggestMatching(names, builder);
     };
@@ -111,6 +106,32 @@ public class ClaimCommand {
             claimArgument.then(nameArgument);
             rename.then(claimArgument);
             command.then(rename);
+        }
+        {
+            LiteralArgumentBuilder<ServerCommandSource> trusted = CommandManager.literal("trusted");
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
+                    .suggests(CLAIM_PROVIDER);
+
+            trusted.executes((context)-> {
+                ServerPlayerEntity player = context.getSource().getPlayer();
+                Claim claim = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension);
+                if (claim == null) {
+                    context.getSource().sendError(new LiteralText("That claim does not exist"));
+                    return -1;
+                }
+                return showTrustedList(context, claim);
+            });
+
+            claimArgument.executes((context) -> {
+                Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
+                if (claim == null) {
+                    context.getSource().sendError(new LiteralText("That claim does not exist"));
+                    return -1;
+                }
+                return showTrustedList(context, claim);
+            });
+            trusted.then(claimArgument);
+            command.then(trusted);
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> stick = CommandManager.literal("stick");
@@ -242,7 +263,7 @@ public class ClaimCommand {
             command.then(transfer);
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> transfer = CommandManager.literal("acceptTransfer");
+            LiteralArgumentBuilder<ServerCommandSource> transfer = CommandManager.literal("accept_transfer");
             RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
             claim.suggests(CLAIM_PROVIDER);
             claim.executes(context -> acceptTransfer(context.getSource()));
@@ -980,14 +1001,29 @@ public class ClaimCommand {
             source.sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
             return 0;
         }
-        source.sendFeedback(new LiteralText("").append(new LiteralText("Claim Name: ").formatted(Formatting.YELLOW)).append(new LiteralText(claim.name).formatted(Formatting.GOLD)), false);
         GameProfile owner = claim.claimBlockOwner == null ? null : source.getMinecraftServer().getUserCache().getByUuid(claim.claimBlockOwner);
-        source.sendFeedback(new LiteralText("").append(new LiteralText("Claim Owner: ").formatted(Formatting.YELLOW)).append(new LiteralText(owner == null ? "No owner" : owner.getName()).formatted(Formatting.GOLD)), false);
         BlockPos size = claim.getSize();
-        source.sendFeedback(new LiteralText("").append(new LiteralText("Claim Size: ").formatted(Formatting.YELLOW)).append(new LiteralText(size.getX() + (claim.is2d() ? "x" : ("x" + size.getY() + "x")) + size.getZ()).formatted(Formatting.GOLD)), false);
-        source.sendFeedback(new LiteralText("").append(new LiteralText("Start position: ").formatted(Formatting.YELLOW)).append(new LiteralText("X:" + claim.min.getX() + (claim.is2d() ? "" : " Y:" + claim.min.getY()) + " Z:" + claim.min.getZ()).formatted(Formatting.GOLD)), false);
-        source.sendFeedback(new LiteralText("").append(new LiteralText("End position: ").formatted(Formatting.YELLOW)).append(new LiteralText("X:" + claim.max.getX() + (claim.is2d() ? "" : " Y:" + claim.max.getY()) + " Z:" + claim.max.getZ()).formatted(Formatting.GOLD)), false);
-        return 0;
+
+        Text text = new LiteralText("\n");
+        text.append(new LiteralText("Claim Info: " + claim.name).formatted(Formatting.GOLD)).append("\n");
+        text.append(newInfoLine("Name", new LiteralText(claim.name).formatted(Formatting.WHITE)));
+        text.append(newInfoLine("Owner",
+                owner == null ? new LiteralText("Not Present").formatted(Formatting.RED, Formatting.ITALIC) : new LiteralText(owner.getName()).formatted(Formatting.AQUA)));
+        text.append(newInfoLine("Size", new LiteralText(size.getX() + (claim.is2d() ? "x" : ("x" + size.getY() + "x")) + size.getZ()).formatted(Formatting.GREEN)));
+
+        Text claimFlags = new LiteralText("");
+        for (Claim.ClaimSettings.Setting value : Claim.ClaimSettings.Setting.values()) {
+            boolean enabled = claim.settings.getSetting(value);
+            claimFlags.append(new LiteralText(value.id).formatted(enabled ? Formatting.GREEN : Formatting.RED)).append(" ");
+        }
+
+        text.append(newInfoLine("Flags", claimFlags));
+        source.sendFeedback(text, false);
+        return 1;
+    }
+    private static Text newInfoLine(String title, Text text) {
+        return new LiteralText("").append(new LiteralText("* " + title + ": ").formatted(Formatting.YELLOW))
+                .append(text).append("\n");
     }
     private static int list(ServerCommandSource source, String player) {
         source.sendFeedback(new LiteralText(player == null ? "Your Claims:" : player + "'s Claims:").formatted(Formatting.YELLOW), false);
@@ -1036,5 +1072,67 @@ public class ClaimCommand {
         claimToRename.name = newName;
         context.getSource().sendFeedback(new LiteralText("Renamed Claim " + name + " to " + newName).formatted(Formatting.GOLD), admin);
         return -1;
+    }
+    private static int showTrustedList(CommandContext<ServerCommandSource> context, Claim claim) throws CommandSyntaxException {
+        ServerCommandSource source = context.getSource();
+        ServerPlayerEntity player = source.getPlayer();
+        int mapSize = claim.permissionManager.playerPermissions.size();
+
+        if (mapSize == 1) {
+            source.sendError(new LiteralText(claim.name + " is not trusting anyone!"));
+            return -1;
+        }
+
+        Text text = new LiteralText("\n");
+        text.append(new LiteralText("Trusted players for Claim ").formatted(Formatting.YELLOW))
+                .append(new LiteralText(claim.name).formatted(Formatting.GOLD)).append("\n");
+
+        AtomicInteger atomicInteger = new AtomicInteger();
+        claim.permissionManager.playerPermissions.forEach((uuid, perm) -> {
+            if (!uuid.equals(player.getUuid())) {
+                atomicInteger.incrementAndGet();
+                Text pText = new LiteralText("");
+                GameProfile profile = source.getMinecraftServer().getUserCache().getByUuid(uuid);
+                String name = profile != null ? profile.getName() : uuid.toString();
+
+                pText.append(new LiteralText(atomicInteger.get() + ". ").formatted(Formatting.GOLD))
+                        .append(new LiteralText(name).formatted(Formatting.YELLOW));
+
+                Text hover = new LiteralText("");
+                hover.append(new LiteralText("Permissions:").formatted(Formatting.WHITE)).append("\n");
+
+                int allowed = 0;
+                int i = 0;
+                boolean nextColor = false;
+                for (Claim.Permission value : Claim.Permission.values()) {
+                    if (claim.permissionManager.hasPermission(uuid, value)) {
+                        Formatting formatting = nextColor ? Formatting.GREEN : Formatting.DARK_GREEN;
+                        hover.append(new LiteralText(value.id).formatted(formatting)).append(" ");
+                        if (i == 3) hover.append("\n");
+                        allowed++;
+                        i++;
+                        nextColor = !nextColor;
+                    }
+                }
+
+                pText.append(new LiteralText(" ")
+                        .append(new LiteralText("(").formatted(Formatting.GOLD))
+                        .append(new LiteralText(String.valueOf(allowed)).formatted(Formatting.GREEN))
+                        .append(new LiteralText("/").formatted(Formatting.GOLD))
+                        .append(new LiteralText(String.valueOf(Claim.Permission.values().length)).formatted(Formatting.YELLOW))
+                        .append(new LiteralText(")").formatted(Formatting.GOLD))
+                );
+
+                pText.styled((style) -> style.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover)));
+                text.append(pText);
+                if (atomicInteger.get() + 1 != mapSize) {
+                    text.append("\n");
+                }
+            }
+        });
+
+        text.append("\n");
+        source.sendFeedback(text, false);
+        return 1;
     }
 }

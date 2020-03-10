@@ -1,21 +1,15 @@
 package io.github.indicode.fabric.itsmine;
 
-import com.mojang.brigadier.arguments.ArgumentType;
-import com.mojang.brigadier.arguments.BoolArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.context.CommandContext;
+import blue.endless.jankson.annotation.Nullable;
 import io.github.indicode.fabric.permissions.Thimble;
-import net.minecraft.nbt.*;
-import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.dimension.DimensionType;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 
 /**
  * @author Indigo Amann
@@ -23,6 +17,7 @@ import java.util.function.Consumer;
 public class Claim {
     public String name;
     public BlockPos min, max;
+    public @Nullable BlockPos tpPos;
     public DimensionType dimension;
     public List<Claim> children = new ArrayList<>();
     public ClaimSettings settings = new ClaimSettings();
@@ -35,11 +30,15 @@ public class Claim {
         fromTag(tag);
     }
     public Claim(String name, UUID claimBlockOwner, BlockPos min, BlockPos max, DimensionType dimension) {
+        this(name, claimBlockOwner, min, max, dimension, null);
+    }
+    public Claim(String name, UUID claimBlockOwner, BlockPos min, BlockPos max, DimensionType dimension, @Nullable BlockPos tpPos) {
         this.claimBlockOwner = claimBlockOwner;
         this.min = min;
         this.max = max;
         this.name = name;
         this.dimension = dimension;
+        this.tpPos = tpPos;
     }
     public boolean includesPosition(BlockPos pos) {
         return pos.getX() >= min.getX() && pos.getY() >= min.getY() && pos.getZ() >= min.getZ() &&
@@ -162,6 +161,11 @@ public class Claim {
             pos.putInt("maxY", max.getY());
             pos.putInt("maxZ", max.getZ());
             pos.putString("dimension", DimensionType.getId(dimension).toString());
+            if (tpPos != null) {
+                pos.putInt("tpX", this.tpPos.getX());
+                pos.putInt("tpY", this.tpPos.getY());
+                pos.putInt("tpZ", this.tpPos.getZ());
+            }
             tag.put("position", pos);
         }
         {
@@ -189,7 +193,10 @@ public class Claim {
             if (maxY == 0) maxY = 255;
             this.min = new BlockPos(minX, minY, minZ);
             this.max = new BlockPos(maxX, maxY, maxZ);
-            this.dimension = DimensionType.byId(new Identifier(pos.getString("dimension")));
+            if (pos.contains("tpX") && pos.contains("tpY") && pos.contains("tpZ")) {
+                this.tpPos = new BlockPos(pos.getInt("tpX"), pos.getInt("tpY"), pos.getInt("tpZ"));
+            }
+                this.dimension = DimensionType.byId(new Identifier(pos.getString("dimension")));
         }
         {
             children = new ArrayList<>();
@@ -221,14 +228,15 @@ public class Claim {
         MODIFY("modify_properties", "Modify Claim Properties"),
         SPAWN_PROTECT("spawn_protect", "Spawn Protection Bypass"),
         PLACE_BREAK("place_break", "Place/Break Blocks"),
-        ACTIVATE_BLOCKS("block_interact", "Right click Blocks"),
+        ACTIVATE_BLOCKS("block_interact", "Interact With Blocks"),
         USE_ITEMS_ON_BLOCKS("use_block_modifier_items", "Use Block Modifying items"),
         PRESS_BUTTONS("press_buttons", "Press Buttons"),
         USE_LEVERS("use_levers", "Use Levers"),
         OPEN_DOORS("open_doors", "Use Doors"),
         ENTITY_INTERACT("entity_interact", "Entity Interaction"),
         ENTITY_DAMAGE("entity_damage", "Hurt Entities"),
-        FLY("fly", "Fly");
+        FLY("fly", "Fly"),
+        TELEPORT("teleport", "Player Teleport Access");
         String id, name;
         Permission(String id, String name) {
             this.id = id;
@@ -441,7 +449,9 @@ public class Claim {
             FIRE_CROSSES_BORDERS("fire_crosses_borders", "Fire Crosses Borders", false),
             PISTON_FROM_INSIDE("pistons_inside_border", "Pistons Cross border from Inside", true),
             PISTON_FROM_OUTSIDE("pistons_outside_border", "Pistons Cross border from Outside", false),
-            MOB_SPAWNING("mob_spawn", "Natural mob spawning", true);
+            MOB_SPAWNING("mob_spawn", "Natural mob spawning", true),
+            KEEP_INVENTORY("keep_inventory", "Keep Inventory", true),
+            TELEPORT("teleport", "Global Teleport Access", true);
 
             String id, name;
             boolean defaultValue;
