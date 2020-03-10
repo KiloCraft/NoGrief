@@ -186,8 +186,8 @@ public class ClaimCommand {
         {
             LiteralArgumentBuilder<ServerCommandSource> help = CommandManager.literal("help");
             RequiredArgumentBuilder<ServerCommandSource, Integer> page = CommandManager.argument("page", IntegerArgumentType.integer(1, 5));
-            help.executes((context) -> sendPage(context.getSource(), Messages.HELP, 1, "Get Started", "/claim help %page%"));
-            page.executes((context) ->  sendPage(context.getSource(), Messages.HELP, IntegerArgumentType.getInteger(context, "page"), "Get Started", "/claim help %page%"));
+            help.executes((context) -> sendPage(context.getSource(), Messages.HELP, 1, "Its Mine!", "/claim help %page%"));
+            page.executes((context) ->  sendPage(context.getSource(), Messages.HELP, IntegerArgumentType.getInteger(context, "page"), "Its Mine!", "/claim help %page%"));
             help.then(page);
             command.then(help);
         }
@@ -419,6 +419,25 @@ public class ClaimCommand {
             list.then(player);
             command.then(list);
         }
+        {
+            LiteralArgumentBuilder<ServerCommandSource> trust = CommandManager.literal("trust");
+            RequiredArgumentBuilder<ServerCommandSource, EntitySelector> playerArgument = CommandManager.argument("player", EntityArgumentType.player());
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
+
+            playerArgument.then(claimArgument);
+            trust.then(playerArgument);
+            command.then(trust);
+        }
+        {
+            LiteralArgumentBuilder<ServerCommandSource> distrust = CommandManager.literal("distrust");
+            RequiredArgumentBuilder<ServerCommandSource, EntitySelector> playerArgument = CommandManager.argument("player", EntityArgumentType.player());
+            RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
+
+            playerArgument.then(claimArgument);
+            distrust.then(playerArgument);
+            command.then(distrust);
+        }
+
         createExceptionCommand(command, false);
 
         {
@@ -699,7 +718,7 @@ public class ClaimCommand {
                 .append(new LiteralText("<-").formatted(Formatting.GRAY, Formatting.BOLD))
                 .append(" ").append(new LiteralText("Prev").formatted(Formatting.GOLD))
                 .setStyle(new Style()
-                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText(page - 1 == text.length ? "<<<" : "|<").formatted(Formatting.GRAY)))
+                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText((page - 1 > text.length) ? "<<<" : "|<").formatted(Formatting.GRAY)))
                         .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf((page + 1 == text.length) ? 1 : (page - 1 == 0 ? 1 : page - 1)))))
                 );
 
@@ -707,7 +726,7 @@ public class ClaimCommand {
                 .append(new LiteralText("Next").formatted(Formatting.GOLD))
                 .append(" ").append(new LiteralText("->").formatted(Formatting.GRAY, Formatting.BOLD)).append(" ")
                 .setStyle(new Style()
-                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText(page - 1 == text.length ? "<<<" : ">|").formatted(Formatting.GRAY)))
+                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText((page - 1 > text.length) ? "<<<" : ">|").formatted(Formatting.GRAY)))
                         .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf((page + 1 == text.length) ? 1 : (page + 1)))))
                 );
 
@@ -1052,7 +1071,7 @@ public class ClaimCommand {
     }
     private static int checkPlayer(ServerCommandSource ret, UUID player) throws CommandSyntaxException {
         int blocks = ClaimManager.INSTANCE.getClaimBlocks(player);
-        ret.sendFeedback(new LiteralText((ret.getPlayer().getGameProfile().getId().equals(player) ? "You have " : "They have ") + ClaimManager.INSTANCE.getClaimBlocks(player) + " blocks left").setStyle(new Style()
+        ret.sendFeedback(new LiteralText((ret.getPlayer().getGameProfile().getId().equals(player) ? "You have " : "They have ") + blocks + " blocks left").setStyle(new Style()
                 .setColor(Formatting.YELLOW)), false);
         return 0;
     }

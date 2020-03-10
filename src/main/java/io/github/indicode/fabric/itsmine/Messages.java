@@ -24,7 +24,7 @@ public class Messages {
                     .append(line(2, "Right click to set the other corner"))
                     .append(line(3, "Type &6/claim create <name> &e to create your claim!"))
                     .append(line(4, "To trust a player in your claim type &6/claim trust <player>"))
-                    .append(line(5, "To untrust a player in your claim type &6/claim untrust <player>")),
+                    .append(line(5, "To untrust a player in your claim type &6/claim distrust <player>")),
             header("How to Claim (Settings)")
                     .append(line("Settings allow you to change some properties of your claim").formatted(Formatting.LIGHT_PURPLE))
                     .append(line(1, "To change a setting, type ").append(text("/claim settings <setting> [true | false]").formatted(Formatting.GOLD)))
@@ -48,11 +48,14 @@ public class Messages {
     };
 
     public static Text[] HELP = new Text[]{
-
+            header("Arguments")
+                    .append(line("&6create ").append(text("&eCreates a claim")))
+                    .append(line("&6blocks ").append(text("&eShows how many blocks you have left")))
+                    .append(line("&6claim ").append(text("&eExpands a claim")))
     };
 
     private static Text header(String title) {
-        return new LiteralText("").append(new LiteralText(title + ":").formatted(Formatting.AQUA, Formatting.UNDERLINE)).formatted(Formatting.WHITE);
+        return new LiteralText("").append(new LiteralText(title + ":").formatted(Formatting.AQUA, Formatting.UNDERLINE)).formatted(Formatting.WHITE).append("\n");
     }
 
     private static Text line(int num, String string) {
