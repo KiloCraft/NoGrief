@@ -55,7 +55,7 @@ public abstract class EntityMixin {
     }
 
     private String getFormattedEventMessage(PlayerEntity player, Claim claim, boolean enter) {
-        String str = enter ? claim.enterMessage : claim.enterMessage;
+        String str = enter ? claim.enterMessage : claim.leaveMessage;
         return  ChatColor.translate(str == null ? (enter ? Config.msg_enter_default : Config.msg_leave_default) : str).replace("%claim%", claim.name)
                 .replace("%player%", player.getEntityName());
     }

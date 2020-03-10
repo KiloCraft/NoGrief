@@ -15,8 +15,8 @@ public class Config {
     public static String msg_break_block = "&c&lHey!&r&c Sorry but you can't Break Blocks here!";
     public static String msg_place_block = "&c&lHey!&r&c Sorry but you can't Place Blocks here!";
     public static String msg_attack_entity = "&c&lHey!&r&c Sorry but you can't Attack Entities here!";
-    public static String msg_enter_default = "&c&lHey!&r&c entering claim &6%claim%";
-    public static String msg_leave_default = "&c&lHey!&r&c leaving claim &6%claim%";
+    public static String msg_enter_default = "&eNow entering claim &6%claim%";
+    public static String msg_leave_default = "&eNow leaving claim &6%claim%";
     private static ModConfig modConfig = new ModConfig("itsmine");
     static void sync(boolean overwrite) {
         modConfig.configure(overwrite, config -> {
@@ -29,7 +29,7 @@ public class Config {
             msg_place_block = config.getString("msg.place.block", msg_place_block, "");
             msg_attack_entity = config.getString("msg.attack.entity", msg_attack_entity, "");
             msg_enter_default = config.getString("msg.enter_claim", msg_enter_default, "Variables: %claim% %player%");
-            msg_leave_default = config.getString("msg.leave_claim", msg_leave_default, "");
+            msg_leave_default = config.getString("msg.leave_claim", msg_leave_default, "Variables: %claim% %player%");
         });
     }
 

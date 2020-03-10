@@ -1,6 +1,7 @@
 package io.github.indicode.fabric.itsmine;
 
 import blue.endless.jankson.annotation.Nullable;
+import com.google.common.collect.Lists;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -88,11 +89,31 @@ public class ClaimCommand {
         }
         return CommandSource.suggestMatching(names, builder);
     };
-    public static final SuggestionProvider<ServerCommandSource> MESSAGE_EVENT_PROVIDER = (source, builder) -> {
+    public static final SuggestionProvider<ServerCommandSource> MESSAGE_EVENTS_PROVIDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
         for (Claim.MessageEvent value : Claim.MessageEvent.values()) {
             strings.add(value.id);
         }
+        return CommandSource.suggestMatching(strings, builder);
+    };
+    public static final SuggestionProvider<ServerCommandSource> EVENT_MESSAGE_PROVIDER = (source, builder) -> {
+        if (!builder.getRemaining().isEmpty())
+            return builder.buildFuture();
+
+        List<String> strings = new ArrayList<>();
+        strings.add("reset");
+        try {
+            Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(source, "claim"));
+            Claim.MessageEvent eventType = Claim.MessageEvent.getById(StringArgumentType.getString(source, "messageEvent"));
+
+            if (eventType != null && claim != null) {
+                String message = eventType == Claim.MessageEvent.ENTER_CLAIM ? claim.enterMessage : claim.leaveMessage;
+                if (message != null) strings.add(message);
+            }
+
+        } catch (Exception ignored) {
+        }
+
         return CommandSource.suggestMatching(strings, builder);
     };
 
@@ -136,6 +157,13 @@ public class ClaimCommand {
             command.then(create);
         }
         {
+            LiteralArgumentBuilder<ServerCommandSource> help = CommandManager.literal("help");
+            RequiredArgumentBuilder<ServerCommandSource, Integer> page = CommandManager.argument("page", IntegerArgumentType.integer(1, 5));
+
+            help.then(page);
+            command.then(help);
+        }
+        {
             LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
             RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
                     .suggests(CLAIM_PROVIDER);
@@ -149,10 +177,11 @@ public class ClaimCommand {
             LiteralArgumentBuilder<ServerCommandSource> message = CommandManager.literal("message");
             RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
             RequiredArgumentBuilder<ServerCommandSource, String> messageEvent = CommandManager.argument("messageEvent", StringArgumentType.word())
-                    .suggests(MESSAGE_EVENT_PROVIDER);
-            RequiredArgumentBuilder<ServerCommandSource, String> messageArgument = CommandManager.argument("message", StringArgumentType.greedyString());
+                    .suggests(MESSAGE_EVENTS_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, String> messageArgument = CommandManager.argument("message", StringArgumentType.greedyString())
+                    .suggests(EVENT_MESSAGE_PROVIDER);
 
-            message.executes(context -> {
+            messageArgument.executes(context -> {
                 ServerPlayerEntity player = context.getSource().getPlayer();
                 Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
                 validateCanAccess(player, claim, PERMISSION_CHECK_ADMIN.test(context.getSource()));
@@ -169,7 +198,7 @@ public class ClaimCommand {
             messageEvent.then(messageArgument);
             claimArgument.then(messageEvent);
             message.then(claimArgument);
-            command.then(messageArgument);
+            command.then(message);
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> trusted = CommandManager.literal("trusted");
@@ -1191,30 +1220,35 @@ public class ClaimCommand {
         return new LiteralText("").append(new LiteralText("* " + title + ": ").formatted(Formatting.YELLOW))
                 .append(text).append("\n");
     }
-    private static int list(ServerCommandSource source, String player) {
-        source.sendFeedback(new LiteralText(player == null ? "Your Claims:" : player + "'s Claims:").formatted(Formatting.YELLOW), false);
-        try {
-                UUID id = player == null ? source.getPlayer().getGameProfile().getId() : OfflineInfo.getIdByName(source.getMinecraftServer().getUserCache(), player);
-                List<Claim> claims = ClaimManager.INSTANCE.getPlayerClaims(id);
-                if (claims.isEmpty()) {
-                    source.sendFeedback(new LiteralText("None").formatted(Formatting.YELLOW), false);
-                    return 0;
-                }
-                LiteralText feedback = new LiteralText("");
-                for (int i = 0; i < claims.size(); i++) {
-                    feedback.append(new LiteralText(claims.get(i).name).setStyle(
-                            new Style().setColor(Formatting.GOLD)
-                            .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/claim info " + claims.get(i).name))
-                    ));
-                    if (i < claims.size() - 1) {
-                        feedback.append(new LiteralText(", ").formatted(Formatting.YELLOW));
-                    }
-                }
-                source.sendFeedback(feedback, false);
-        } catch (CommandSyntaxException e) {
-            source.sendFeedback(new LiteralText("No player is specified").formatted(Formatting.RED), false);
+    private static int list(ServerCommandSource source, String target) throws CommandSyntaxException {
+        ServerPlayerEntity player = source.getPlayer();
+        GameProfile profile = target == null ? player.getGameProfile() : source.getMinecraftServer().getUserCache().findByName(target);
+
+        if (profile == null) {
+            source.sendError(Messages.INVALID_PLAYER);
+            return -1;
         }
-        return 0;
+
+        List<Claim> claims = ClaimManager.INSTANCE.getPlayerClaims(profile.getId());
+        if (claims.isEmpty()) {
+            source.sendFeedback(new LiteralText("No Claims").formatted(Formatting.RED), false);
+            return -1;
+        }
+
+        Text text = new LiteralText("\n").append(new LiteralText("Claims: " + source.getName()).formatted(Formatting.GOLD)).append("\n ");
+        boolean nextColor = false;
+        for (Claim claim : claims) {
+            Text cText = new LiteralText(claim.name).formatted(nextColor ? Formatting.YELLOW : Formatting.GOLD).styled((style) -> {
+                style.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText("Click for more Info").formatted(Formatting.GREEN)));
+                style.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/claim info " + claim.name));
+            });
+
+            nextColor = !nextColor;
+            text.append(cText.append(" "));
+        }
+
+        source.sendFeedback(text.append("\n"), false);
+        return 1;
     }
     private static int rename(CommandContext<ServerCommandSource> context, boolean admin) throws CommandSyntaxException {
         String name = StringArgumentType.getString(context, "claim");
@@ -1313,9 +1347,17 @@ public class ClaimCommand {
     private static int setEventMessage(ServerCommandSource source, Claim claim, Claim.MessageEvent event, String message) {
         switch (event) {
             case ENTER_CLAIM:
-                claim.enterMessage = ChatColor.translate(message);
+                claim.enterMessage = message.equalsIgnoreCase("reset") ? null : message;
             case LEAVE_CLAIM:
-                claim.leaveMessage = ChatColor.translate(message);
+                claim.leaveMessage = message.equalsIgnoreCase("reset") ? null : message;
+        }
+
+        if (message.equalsIgnoreCase("reset")) {
+            source.sendFeedback(new LiteralText("Reset ").append(new LiteralText(event.id).formatted(Formatting.GOLD)
+                            .append(new LiteralText(" Event Message for claim ").formatted(Formatting.YELLOW))
+                            .append(new LiteralText(claim.name).formatted(Formatting.GOLD))).formatted(Formatting.YELLOW)
+                    , false);
+            return -1;
         }
 
         source.sendFeedback(new LiteralText("Set ").append(new LiteralText(event.id).formatted(Formatting.GOLD)

@@ -11,4 +11,6 @@ public class Messages {
 
     public static final Text INVALID_MESSAGE_EVENT = new LiteralText("Invalid Message Event!");
 
+    public static final Text INVALID_PLAYER = new LiteralText("Can not find a Player with that Name!");
+
 }
