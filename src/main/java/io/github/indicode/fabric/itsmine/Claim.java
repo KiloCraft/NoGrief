@@ -179,6 +179,7 @@ public class Claim {
             tag.put("permissions", permissionManager.toNBT());
             if (claimBlockOwner != null) tag.putUuid("top_owner", claimBlockOwner);
         }
+        if (this.customOwnerName != null) tag.putString("cOwnerName", this.customOwnerName);
         tag.putString("name", name);
         return tag;
     }
@@ -212,6 +213,7 @@ public class Claim {
             permissionManager.fromNBT(tag.getCompound("permissions"));
             if (tag.containsUuid("top_owner")) claimBlockOwner = tag.getUuid("top_owner");
         }
+        if (tag.contains("cOwnerName")) this.customOwnerName = tag.getString("cOwnerName");
         name = tag.getString("name");
     }
 

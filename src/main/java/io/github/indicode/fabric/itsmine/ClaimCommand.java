@@ -33,14 +33,27 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.Pair;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.registry.Registry;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 /**
  * @author Indigo Amann
  */
 public class ClaimCommand {
+    private static Predicate<ServerCommandSource> perm(String str) {
+        return source -> Thimble.hasPermissionOrOp(source, "itsmine." + str, 2);
+    }
+    private static Predicate<ServerCommandSource> perm(String str, int op) {
+        return source -> Thimble.hasPermissionOrOp(source, "itsmine." + str, op);
+    }
+    private static final Predicate<ServerCommandSource> PERMISSION_CHECK_ADMIN = src -> perm("admin").test(src) || perm("admin.modify_balance").test(src) ||
+            perm("admin.infinite_blocks").test(src) || perm("admin.modify").test(src) ||
+            perm("admin.modify_balance").test(src) || perm("admin.ignore_claims").test(src) ||
+            perm("admin.modify_permissions").test(src);
+
     public static final SuggestionProvider<ServerCommandSource> DIRECTION_SUGGESTION_BUILDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
         for (Direction direction: Direction.values()) {
@@ -164,7 +177,7 @@ public class ClaimCommand {
             command.then(hide);
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> check = CommandManager.literal("check_blocks");
+            LiteralArgumentBuilder<ServerCommandSource> check = CommandManager.literal("blocks");
             RequiredArgumentBuilder<ServerCommandSource, EntitySelector> other = CommandManager.argument("player", EntityArgumentType.player());
             other.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.checkothers", 2));
             other.executes(ctx -> checkPlayer(ctx.getSource(), EntityArgumentType.getPlayer(ctx, "player").getGameProfile().getId()));
@@ -173,7 +186,7 @@ public class ClaimCommand {
             command.then(check);
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("destroy");
+            LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("remove");
             RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
             claim.suggests(CLAIM_PROVIDER);
             LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
@@ -239,7 +252,7 @@ public class ClaimCommand {
             }
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("destroy");
+            LiteralArgumentBuilder<ServerCommandSource> delete = CommandManager.literal("remove");
             RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
             claim.suggests(CLAIM_PROVIDER);
             LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
@@ -252,24 +265,31 @@ public class ClaimCommand {
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> transfer = CommandManager.literal("transfer");
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-            claim.suggests(CLAIM_PROVIDER);
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word()).suggests(CLAIM_PROVIDER);
             RequiredArgumentBuilder<ServerCommandSource, EntitySelector> player = CommandManager.argument("player", EntityArgumentType.player());
             LiteralArgumentBuilder<ServerCommandSource> confirm = CommandManager.literal("confirm");
-            confirm.executes(context -> transfer(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), EntityArgumentType.getPlayer(context, "player"), false));
+            confirm.executes(context -> {
+                final String string = "-accept-";
+                ServerPlayerEntity p = EntityArgumentType.getPlayer(context, "player");
+                String input = StringArgumentType.getString(context, "claim");
+                String claimName = input.replace(string, "");
+                Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(claimName);
+                if (claim1 == null) {
+                    context.getSource().sendError(new LiteralText("Can't find a claim with that Name!"));
+                    return -1;
+                }
+
+                if (input.startsWith(string)) {
+                    return acceptTransfer(context.getSource());
+                }
+
+                return transfer(context.getSource(), claim1, p, false);
+            });
             player.executes(context -> requestTransfer(context.getSource(), ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim")), EntityArgumentType.getPlayer(context, "player"), false));
             player.then(confirm);
             claim.then(player);
             transfer.then(claim);
             transfer.executes(context -> requestTransfer(context.getSource(), ClaimManager.INSTANCE.getClaimAt(new BlockPos(context.getSource().getPosition()), context.getSource().getWorld().getDimension().getType()), EntityArgumentType.getPlayer(context, "player"), false));
-            command.then(transfer);
-        }
-        {
-            LiteralArgumentBuilder<ServerCommandSource> transfer = CommandManager.literal("accept_transfer");
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
-            claim.suggests(CLAIM_PROVIDER);
-            claim.executes(context -> acceptTransfer(context.getSource()));
-            transfer.then(claim);
             command.then(transfer);
         }
         {
@@ -375,9 +395,9 @@ public class ClaimCommand {
         }
         {
             LiteralArgumentBuilder<ServerCommandSource> admin = CommandManager.literal("admin");
-            //admin.requires(source -> Thimble.hasPermissionChildOrOp(source, "itsmine.admin", 4));
+            admin.requires(PERMISSION_CHECK_ADMIN);
             {
-                LiteralArgumentBuilder<ServerCommandSource> add = CommandManager.literal("add_blocks");
+                LiteralArgumentBuilder<ServerCommandSource> add = CommandManager.literal("addBlocks");
                 add.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_balance", 2));
                 RequiredArgumentBuilder<ServerCommandSource, EntitySelector> player = CommandManager.argument("player", EntityArgumentType.players());
                 RequiredArgumentBuilder<ServerCommandSource, Integer> amount = CommandManager.argument("amount", IntegerArgumentType.integer());
@@ -391,6 +411,34 @@ public class ClaimCommand {
                 admin.then(add);
             }
             {
+                LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("setOwnerName");
+                RequiredArgumentBuilder<ServerCommandSource, String> nameArgument = CommandManager.argument("newName", StringArgumentType.word());
+                RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
+                        .suggests(CLAIM_PROVIDER);
+
+                nameArgument.executes((context) -> {
+                   Claim claim = ClaimManager.INSTANCE.getClaimAt(context.getSource().getPlayer().getSenseCenterPos(), context.getSource().getPlayer().dimension);
+                   if (claim == null) {
+                       context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
+                       return -1;
+                   }
+                    return setOwnerName(context.getSource(), claim, StringArgumentType.getString(context, "newName"));
+                });
+
+                claimArgument.executes((context) -> {
+                    Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
+                    if (claim == null) {
+                        context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
+                        return -1;
+                    }
+                    return setOwnerName(context.getSource(), claim, StringArgumentType.getString(context, "newName"));
+                });
+
+                nameArgument.then(claimArgument);
+                rename.then(nameArgument);
+                admin.then(rename);
+            }
+            {
                 LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
                 RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
                         .suggests(CLAIM_PROVIDER);
@@ -401,7 +449,7 @@ public class ClaimCommand {
                 admin.then(rename);
             }
             {
-                LiteralArgumentBuilder<ServerCommandSource> remove = CommandManager.literal("remove_blocks");
+                LiteralArgumentBuilder<ServerCommandSource> remove = CommandManager.literal("removeBlocks");
                 remove.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_balance", 2));
                 RequiredArgumentBuilder<ServerCommandSource, EntitySelector> player = CommandManager.argument("player", EntityArgumentType.players());
                 RequiredArgumentBuilder<ServerCommandSource, Integer> amount = CommandManager.argument("amount", IntegerArgumentType.integer());
@@ -415,7 +463,7 @@ public class ClaimCommand {
                 admin.then(remove);
             }
             {
-                LiteralArgumentBuilder<ServerCommandSource> set = CommandManager.literal("set_blocks");
+                LiteralArgumentBuilder<ServerCommandSource> set = CommandManager.literal("setBlocks");
                 set.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_balance", 2));
                 RequiredArgumentBuilder<ServerCommandSource, EntitySelector> player = CommandManager.argument("player", EntityArgumentType.players());
                 RequiredArgumentBuilder<ServerCommandSource, Integer> amount = CommandManager.argument("amount", IntegerArgumentType.integer());
@@ -497,7 +545,7 @@ public class ClaimCommand {
                 admin.then(create);
             }
             {
-                LiteralArgumentBuilder<ServerCommandSource> ignore = CommandManager.literal("ignore_claims");
+                LiteralArgumentBuilder<ServerCommandSource> ignore = CommandManager.literal("ignoreClaims");
                 ignore.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.ignore_claims", 4));
                 ignore.executes(context -> {
                     UUID id = context.getSource().getPlayer().getGameProfile().getId();
@@ -573,7 +621,7 @@ public class ClaimCommand {
 
     private static void createExceptionCommand(LiteralArgumentBuilder<ServerCommandSource> command, boolean admin) {
         LiteralArgumentBuilder<ServerCommandSource> exceptions = CommandManager.literal("permissions");
-        if (admin) exceptions.requires(source -> Thimble.hasPermissionOrOp(source, "claim.admin.modify_permissions", 2));
+        if (admin) exceptions.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_permissions", 2));
         RequiredArgumentBuilder<ServerCommandSource, String> claim = CommandManager.argument("claim", StringArgumentType.word());
         claim.suggests(CLAIM_PROVIDER);
         LiteralArgumentBuilder<ServerCommandSource> playerLiteral = CommandManager.literal("player");
@@ -940,7 +988,7 @@ public class ClaimCommand {
                 .append(new LiteralText("[ACCEPT OWNERSHIP]").setStyle(new Style()
                         .setColor(Formatting.GREEN)
                         .setBold(true)
-                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/claim accept_transfer " + claim.name)))));
+                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/claim transfer -accept-" + claim.name + " " + player.getName() + " confirm")))));
         pendingClaimTransfers.put(player.getGameProfile().getId(), claim.name);
         return 0;
     }
@@ -957,11 +1005,6 @@ public class ClaimCommand {
         claim.permissionManager.playerPermissions.put(claim.claimBlockOwner, claim.permissionManager.playerPermissions.get(sender.getPlayer().getGameProfile().getId()));
         claim.permissionManager.playerPermissions.put(sender.getPlayer().getGameProfile().getId(), op);
         claim.claimBlockOwner = sender.getPlayer().getGameProfile().getId();
-        return 0;
-    }
-    private static int showClaimInfo(ServerCommandSource sender, Claim claim) {
-        sender.sendFeedback(new LiteralText("Claim Name: " + claim.name), false);
-        //sender.sendFeedback(new LiteralText("Owner")); // how to do this...
         return 0;
     }
     private static int modifyException(Claim claim, ServerPlayerEntity exception, Claim.Permission permission, boolean allowed) {
@@ -1048,18 +1091,59 @@ public class ClaimCommand {
         text.append(new LiteralText("Claim Info: " + claim.name).formatted(Formatting.GOLD)).append("\n");
         text.append(newInfoLine("Name", new LiteralText(claim.name).formatted(Formatting.WHITE)));
         text.append(newInfoLine("Owner",
-                owner == null ? new LiteralText("Not Present").formatted(Formatting.RED, Formatting.ITALIC) : new LiteralText(owner.getName()).formatted(Formatting.AQUA)));
+                owner != null ? new LiteralText(owner.getName()).formatted(Formatting.GOLD) :
+                        claim.customOwnerName != null ? new LiteralText(claim.customOwnerName).formatted(Formatting.GOLD) :
+                                new LiteralText("Not Present").formatted(Formatting.RED, Formatting.ITALIC)));
         text.append(newInfoLine("Size", new LiteralText(size.getX() + (claim.is2d() ? "x" : ("x" + size.getY() + "x")) + size.getZ()).formatted(Formatting.GREEN)));
 
         Text claimFlags = new LiteralText("");
+        boolean nextEnabled = false;
+        boolean nextDisabled = false;
         for (Claim.ClaimSettings.Setting value : Claim.ClaimSettings.Setting.values()) {
             boolean enabled = claim.settings.getSetting(value);
-            claimFlags.append(new LiteralText(value.id).formatted(enabled ? Formatting.GREEN : Formatting.RED)).append(" ");
+            Formatting formatting;
+            if (enabled) {
+                if (nextEnabled) formatting = Formatting.GREEN;
+                else formatting = Formatting.DARK_GREEN;
+                nextEnabled = !nextEnabled;
+            } else {
+                if (nextDisabled) formatting = Formatting.RED;
+                else formatting = Formatting.DARK_RED;
+                nextDisabled = !nextDisabled;
+            }
+
+            claimFlags.append(new LiteralText(value.id).formatted(formatting)).append(" ");
         }
 
         text.append(newInfoLine("Flags", claimFlags));
+        Text pos = new LiteralText("");
+        Text min = newPosLine(claim.min, Formatting.AQUA, Formatting.DARK_AQUA);
+        Text max = newPosLine(claim.max, Formatting.LIGHT_PURPLE, Formatting.DARK_PURPLE);
+
+        if (PERMISSION_CHECK_ADMIN.test(source)) {
+            String format = "/tp " + source.getName() + (Config.claims2d ? " %s ~ %s" : " %s %s %s");
+            min.styled(style -> style.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND,
+                    String.format(format, claim.min.getX(), Config.claims2d ? claim.min.getZ() : claim.min.getY(), claim.min.getZ()))));
+            max.styled(style -> style.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND,
+                    String.format(format, claim.max.getX(), Config.claims2d ? claim.max.getZ() : claim.max.getY(), claim.max.getZ()))));
+        }
+
+        pos.append(newInfoLine("Position", new LiteralText("")
+                .append(new LiteralText("Min ").formatted(Formatting.WHITE).append(min))
+                .append(" ")
+                .append(new LiteralText("Max ").formatted(Formatting.WHITE).append(max))));
+        text.append(pos);
+        text.append(newInfoLine("Dimension", new LiteralText(Registry.DIMENSION_TYPE.getId(claim.dimension).getPath())));
         source.sendFeedback(text, false);
         return 1;
+    }
+    private static Text newPosLine(BlockPos pos, Formatting form1, Formatting form2) {
+        return new LiteralText("")
+                .append(new LiteralText(String.valueOf(pos.getX())).formatted(form1))
+                .append(" ")
+                .append(new LiteralText(String.valueOf(pos.getY())).formatted(form2))
+                .append(" ")
+                .append(new LiteralText(String.valueOf(pos.getZ())).formatted(form1));
     }
     private static Text newInfoLine(String title, Text text) {
         return new LiteralText("").append(new LiteralText("* " + title + ": ").formatted(Formatting.YELLOW))
@@ -1173,6 +1257,11 @@ public class ClaimCommand {
 
         text.append("\n");
         source.sendFeedback(text, false);
+        return 1;
+    }
+    private static int setOwnerName(ServerCommandSource source, Claim claim, String name) {
+        source.sendFeedback(new LiteralText("Set the Custom Owner Name to " + name + " from " + (claim.customOwnerName == null ? "Not Present" : claim.customOwnerName) + " for " + claim.name), true);
+        claim.customOwnerName = name;
         return 1;
     }
 }
