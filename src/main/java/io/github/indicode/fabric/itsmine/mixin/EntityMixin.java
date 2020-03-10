@@ -22,6 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class EntityMixin {
     @Shadow public World world;
 
+    @Shadow public int timeUntilRegen;
     private Claim pclaim = null;
     @Inject(method = "setPos", at = @At("HEAD"))
     public void doPrePosActions(double x, double y, double z, CallbackInfo ci) {
@@ -45,9 +46,13 @@ public abstract class EntityMixin {
             }
         }
     }
+
+    private int tick = 0;
     @Inject(method = "tick", at = @At("RETURN"))
-    public void doTickActions(CallbackInfo ci) {
-        if (!world.isClient && (Object)this instanceof PlayerEntity) {
+    public void lemmeFlyToTheSkies(CallbackInfo ci) {
+        if (tick >= 8 && !world.isClient && (Object) this instanceof PlayerEntity) {
+            tick = 0;
+
             PlayerEntity player = (PlayerEntity) (Object)this;
             if (player.getSenseCenterPos() == null) return;
             boolean old = player.abilities.allowFlying;
@@ -67,5 +72,7 @@ public abstract class EntityMixin {
             }
 
         }
+
+        tick++;
     }
 }

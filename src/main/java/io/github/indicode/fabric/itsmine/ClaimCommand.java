@@ -776,7 +776,7 @@ public class ClaimCommand {
         return 0;
     }
     private static void silentHideShow(ServerPlayerEntity player, Claim claim, boolean hide, boolean updateStatus) {
-        BlockState block = hide ? null : Blocks.LAPIS_BLOCK.getDefaultState();
+        BlockState block = hide ? null : Blocks.TARGET.getDefaultState();
         int showRange = 5;
         int closeShowRange = 8;
         BlockPos pos = hide ? ((ClaimShower)player).getLastShowPos() : player.getSenseCenterPos();

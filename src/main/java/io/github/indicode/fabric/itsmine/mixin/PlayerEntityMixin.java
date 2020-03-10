@@ -8,6 +8,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.LiteralText;
 import net.minecraft.util.ActionResult;
@@ -17,6 +18,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,6 +32,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  */
 @Mixin(PlayerEntity.class)
 public abstract class PlayerEntityMixin extends LivingEntity implements ClaimShower {
+    @Shadow protected abstract void vanishCursedItems();
+
+    @Shadow @Final public PlayerInventory inventory;
+
     protected PlayerEntityMixin(EntityType<? extends LivingEntity> entityType_1, World world_1) {
         super(entityType_1, world_1);
     }
@@ -61,15 +67,18 @@ public abstract class PlayerEntityMixin extends LivingEntity implements ClaimSho
         }
     }
 
-    @Inject(method = "dropInventory", cancellable = true, at = @At(value = "HEAD", target = "Lnet/minecraft/entity/player/PlayerEntity;dropInventory()V"))
-    public void keepMyInventory(CallbackInfo ci) {
-        if (this.world.getGameRules().getBoolean(GameRules.KEEP_INVENTORY))
-            return;
+    @Inject(method = "dropInventory", at = @At("HEAD"), cancellable = true)
+    public void noTakieMyThingies(CallbackInfo ci) {
+        ci.cancel();
 
-        Claim claim = ClaimManager.INSTANCE.getClaimAt(this.getSenseCenterPos(), this.world.getDimension().getType());
-        if (claim != null && claim.settings.getSetting(Claim.ClaimSettings.Setting.KEEP_INVENTORY)) {
-            super.dropInventory();
-            ci.cancel();
+        super.dropInventory();
+        if (!this.world.getGameRules().getBoolean(GameRules.KEEP_INVENTORY)) {
+            Claim claim = ClaimManager.INSTANCE.getClaimAt(this.getSenseCenterPos(), this.world.getDimension().getType());
+            if (claim != null && !claim.settings.getSetting(Claim.ClaimSettings.Setting.KEEP_INVENTORY)) {
+                this.vanishCursedItems();
+                this.inventory.dropAll();
+                ci.cancel();
+            }
         }
     }
 
