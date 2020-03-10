@@ -23,6 +23,7 @@ public class Claim {
     public ClaimSettings settings = new ClaimSettings();
     public PermissionManager permissionManager = new PermissionManager();
     public UUID claimBlockOwner = null;
+    public String customOwnerName;
     public Claim() {
 
     }

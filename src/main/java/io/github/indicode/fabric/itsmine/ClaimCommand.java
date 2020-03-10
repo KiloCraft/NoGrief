@@ -1,5 +1,6 @@
 package io.github.indicode.fabric.itsmine;
 
+import blue.endless.jankson.annotation.Nullable;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -76,7 +77,7 @@ public class ClaimCommand {
                     context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select position #2(Left Click) with a stick.").formatted(Formatting.RED), false);
                 } else {
                     String cname = StringArgumentType.getString(context, "name");
-                    if (createClaim(cname, context.getSource(), selectedPositions.getLeft(), selectedPositions.getRight(), false) > 0) {
+                    if (createClaim(cname, context.getSource(), selectedPositions.getLeft(), selectedPositions.getRight(), false, null) > 0) {
                         ClaimManager.INSTANCE.stickPositions.remove(player);
                     }
                 }
@@ -90,7 +91,8 @@ public class ClaimCommand {
                     context.getSource(),
                     BlockPosArgumentType.getBlockPos(context, "min"),
                     BlockPosArgumentType.getBlockPos(context, "max"),
-                    false
+                    false,
+                    null
             ));
             min.then(max);
             name.then(min);
@@ -442,17 +444,54 @@ public class ClaimCommand {
             {
                 LiteralArgumentBuilder<ServerCommandSource> create = CommandManager.literal("create");
                 create.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.infinite_claim", 4));
-                ArgumentBuilder name = CommandManager.argument("name", StringArgumentType.word());
-                ArgumentBuilder min = CommandManager.argument("min", BlockPosArgumentType.blockPos());
+                ArgumentBuilder<ServerCommandSource, ?> name = CommandManager.argument("name", StringArgumentType.word());
+                ArgumentBuilder<ServerCommandSource, ?> customOwner = CommandManager.argument("customOwnerName", StringArgumentType.word());
+                ArgumentBuilder<ServerCommandSource, ?> min = CommandManager.argument("min", BlockPosArgumentType.blockPos());
                 RequiredArgumentBuilder<ServerCommandSource, PosArgument> max = CommandManager.argument("max", BlockPosArgumentType.blockPos());
                 max.executes(context -> createClaim(
                         StringArgumentType.getString(context, "name"),
                         context.getSource(),
                         BlockPosArgumentType.getBlockPos(context, "min"),
                         BlockPosArgumentType.getBlockPos(context, "max"),
-                        true
+                        true,
+                        null
                 ));
+                name.executes(context ->  {
+                    ServerPlayerEntity player = context.getSource().getPlayer();
+                    Pair<BlockPos, BlockPos> selectedPositions = ClaimManager.INSTANCE.stickPositions.get(player);
+                    if (selectedPositions == null) {
+                        context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select them with a stick.").formatted(Formatting.RED), false);
+                    } else if (selectedPositions.getLeft() == null) {
+                        context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select position #1(Right Click) with a stick.").formatted(Formatting.RED), false);
+                    } else if (selectedPositions.getRight() == null) {
+                        context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select position #2(Left Click) with a stick.").formatted(Formatting.RED), false);
+                    } else {
+                        String cname = StringArgumentType.getString(context, "name");
+                        if (createClaim(cname, context.getSource(), selectedPositions.getLeft(), selectedPositions.getRight(), true, null) > 0) {
+                            ClaimManager.INSTANCE.stickPositions.remove(player);
+                        }
+                    }
+                    return 0;
+                });
+                customOwner.executes(context ->  {
+                    ServerPlayerEntity player = context.getSource().getPlayer();
+                    Pair<BlockPos, BlockPos> selectedPositions = ClaimManager.INSTANCE.stickPositions.get(player);
+                    if (selectedPositions == null) {
+                        context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select them with a stick.").formatted(Formatting.RED), false);
+                    } else if (selectedPositions.getLeft() == null) {
+                        context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select position #1(Right Click) with a stick.").formatted(Formatting.RED), false);
+                    } else if (selectedPositions.getRight() == null) {
+                        context.getSource().sendFeedback(new LiteralText("You need to specify block positions or select position #2(Left Click) with a stick.").formatted(Formatting.RED), false);
+                    } else {
+                        String cname = StringArgumentType.getString(context, "name");
+                        if (createClaim(cname, context.getSource(), selectedPositions.getLeft(), selectedPositions.getRight(), true, StringArgumentType.getString(context, "customOwnerName")) > 0) {
+                            ClaimManager.INSTANCE.stickPositions.remove(player);
+                        }
+                    }
+                    return 0;
+                });
                 min.then(max);
+                name.then(customOwner);
                 name.then(min);
                 create.then(name);
                 admin.then(create);
@@ -757,7 +796,7 @@ public class ClaimCommand {
         if (state != null) ((BlockUpdatePacketMixin)packet).setState(state);
         player.networkHandler.sendPacket(packet);
     }
-    private static int createClaim(String name, ServerCommandSource owner, BlockPos posA, BlockPos posB, boolean admin) throws CommandSyntaxException {
+    private static int createClaim(String name, ServerCommandSource owner, BlockPos posA, BlockPos posB, boolean admin, @Nullable String cOwnerName) throws CommandSyntaxException {
         UUID ownerID = owner.getPlayer().getGameProfile().getId();
         int x, y = 0, z, mx, my = 255, mz;
         if (posA.getX() > posB.getX()) {
@@ -789,7 +828,8 @@ public class ClaimCommand {
         sub = sub.add(1,Config.claims2d ? 0 : 1,1);
         int subInt = sub.getX() * (Config.claims2d ? 1 : sub.getY()) * sub.getZ();
 
-        Claim claim = new Claim(name, admin ? null : ownerID, min, max, owner.getWorld().getDimension().getType());
+        Claim claim = new Claim(name, admin ? null : ownerID, min, max, owner.getWorld().getDimension().getType(), owner.getPlayer().getSenseCenterPos());
+        if (cOwnerName != null) claim.customOwnerName = cOwnerName;
         claim.permissionManager.playerPermissions.put(ownerID, new Claim.InvertedPermissionMap());
         if (!ClaimManager.INSTANCE.claimsByName.containsKey(name)) {
             if (!ClaimManager.INSTANCE.wouldIntersect(claim)) {
