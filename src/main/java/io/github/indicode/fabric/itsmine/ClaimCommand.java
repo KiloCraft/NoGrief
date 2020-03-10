@@ -1,7 +1,6 @@
 package io.github.indicode.fabric.itsmine;
 
 import blue.endless.jankson.annotation.Nullable;
-import com.google.common.collect.Lists;
 import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -24,6 +23,7 @@ import net.minecraft.command.CommandException;
 import net.minecraft.command.EntitySelector;
 import net.minecraft.command.arguments.BlockPosArgumentType;
 import net.minecraft.command.arguments.EntityArgumentType;
+import net.minecraft.command.arguments.GameProfileArgumentType;
 import net.minecraft.command.arguments.PosArgument;
 import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
 import net.minecraft.server.command.CommandManager;
@@ -403,7 +403,7 @@ public class ClaimCommand {
                         context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
                         return 0;
                     }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.CHANGE_FLAGS)) {
+                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
                         context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
                         return 0;
                     }
@@ -417,7 +417,7 @@ public class ClaimCommand {
                         context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
                         return 0;
                     }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.CHANGE_FLAGS)) {
+                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
                         context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
                         return 0;
                     }
@@ -437,7 +437,7 @@ public class ClaimCommand {
                         context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
                         return 0;
                     }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.CHANGE_FLAGS)) {
+                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
                         context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
                         return 0;
                     }
@@ -452,7 +452,7 @@ public class ClaimCommand {
                         context.getSource().sendFeedback(new LiteralText("That claim does not exist").formatted(Formatting.RED), false);
                         return 0;
                     }
-                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.CHANGE_FLAGS)) {
+                    if (!claim1.permissionManager.hasPermission(context.getSource().getPlayer().getGameProfile().getId(), Claim.Permission.MODIFY_FLAGS)) {
                         context.getSource().sendFeedback(new LiteralText("You cannot change flags in this claim").formatted(Formatting.RED), false);
                         return 0;
                     }
@@ -484,10 +484,50 @@ public class ClaimCommand {
                 admin.then(add);
             }
             {
-                LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("setOwnerName");
+                LiteralArgumentBuilder<ServerCommandSource> set = CommandManager.literal("setOwner");
+                RequiredArgumentBuilder<ServerCommandSource, GameProfileArgumentType.GameProfileArgument> newOwner = CommandManager.argument("newOwner", GameProfileArgumentType.gameProfile());
+                RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
+
+                newOwner.executes((context) -> {
+                    Claim claim = ClaimManager.INSTANCE.getClaimAt(context.getSource().getPlayer().getSenseCenterPos(), context.getSource().getPlayer().dimension);
+                    if (claim == null) {
+                        context.getSource().sendError(Messages.INVALID_CLAIM);
+                        return -1;
+                    }
+
+                    Collection<GameProfile> profiles = GameProfileArgumentType.getProfileArgument(context, "newOwner");
+
+                    if (profiles.size() > 1) {
+                        context.getSource().sendError(Messages.TOO_MANY_SELECTIONS);
+                        return -1;
+                    }
+                    return setOwner(context.getSource(), claim, profiles.iterator().next());
+                });
+
+                claimArgument.executes((context) -> {
+                    Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
+                    if (claim == null) {
+                        context.getSource().sendError(Messages.INVALID_CLAIM);
+                        return -1;
+                    }
+
+                    Collection<GameProfile> profiles = GameProfileArgumentType.getProfileArgument(context, "newOwner");
+
+                    if (profiles.size() > 1) {
+                        context.getSource().sendError(Messages.TOO_MANY_SELECTIONS);
+                        return -1;
+                    }
+                    return setOwner(context.getSource(), claim, profiles.iterator().next());
+                });
+
+                newOwner.then(claimArgument);
+                set.then(newOwner);
+                admin.then(set);
+            }
+            {
+                LiteralArgumentBuilder<ServerCommandSource> set = CommandManager.literal("setOwnerName");
                 RequiredArgumentBuilder<ServerCommandSource, String> nameArgument = CommandManager.argument("newName", StringArgumentType.word());
-                RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
-                        .suggests(CLAIM_PROVIDER);
+                RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = getClaimArgument();
 
                 nameArgument.executes((context) -> {
                    Claim claim = ClaimManager.INSTANCE.getClaimAt(context.getSource().getPlayer().getSenseCenterPos(), context.getSource().getPlayer().dimension);
@@ -508,8 +548,8 @@ public class ClaimCommand {
                 });
 
                 nameArgument.then(claimArgument);
-                rename.then(nameArgument);
-                admin.then(rename);
+                set.then(nameArgument);
+                admin.then(set);
             }
             {
                 LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
@@ -701,7 +741,7 @@ public class ClaimCommand {
             LiteralArgumentBuilder<ServerCommandSource> remove = CommandManager.literal("remove");
             remove.executes(context -> {
                 Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                     ServerPlayerEntity player1 = EntityArgumentType.getPlayer(context, "player");
                     claim1.permissionManager.resetPermissions(player1.getGameProfile().getId());
                     context.getSource().sendFeedback(new LiteralText(player1.getGameProfile().getName() + " no longer has an exception in the claim").formatted(Formatting.YELLOW), false);
@@ -713,7 +753,7 @@ public class ClaimCommand {
             RequiredArgumentBuilder<ServerCommandSource, Boolean> allstate = CommandManager.argument("allow", BoolArgumentType.bool());
             allstate.executes(context -> {
                 Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                     ServerPlayerEntity player1 = EntityArgumentType.getPlayer(context, "player");
                     boolean permission = BoolArgumentType.getBool(context, "allow");
                     claim1.permissionManager.playerPermissions.put(player1.getGameProfile().getId(), permission ? new Claim.InvertedPermissionMap() : new Claim.DefaultPermissionMap());
@@ -728,7 +768,7 @@ public class ClaimCommand {
                 RequiredArgumentBuilder<ServerCommandSource, Boolean> allow = CommandManager.argument("allow", BoolArgumentType.bool());
                 allow.executes(context -> {
                     Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                    if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                         ServerPlayerEntity player1 = EntityArgumentType.getPlayer(context, "player");
                         boolean permission = BoolArgumentType.getBool(context, "allow");
                         modifyException(claim1, player1, value, permission);
@@ -738,7 +778,7 @@ public class ClaimCommand {
                 });
                 permNode.executes(context -> {
                     Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                    if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                         ServerPlayerEntity player1 = EntityArgumentType.getPlayer(context, "player");
                         boolean permission = hasPermission(claim1, player1, value);
                         context.getSource().sendFeedback(new LiteralText(player1.getGameProfile().getName() + (permission ? " has" : " does not have") + " the permission " + value.name).formatted(Formatting.YELLOW), false);
@@ -758,7 +798,7 @@ public class ClaimCommand {
             LiteralArgumentBuilder<ServerCommandSource> remove = CommandManager.literal("remove");
             remove.executes(context -> {
                 Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                     String group1 = StringArgumentType.getString(context, "group");
                     verifyGroup(group1);
                     claim1.permissionManager.resetPermissions(group1);
@@ -772,7 +812,7 @@ public class ClaimCommand {
                 RequiredArgumentBuilder<ServerCommandSource, Boolean> allow = CommandManager.argument("allow", BoolArgumentType.bool());
                 allow.executes(context -> {
                     Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                    if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                         String group1 = StringArgumentType.getString(context, "group");
                         verifyGroup(group1);
                         boolean permission = BoolArgumentType.getBool(context, "allow");
@@ -783,7 +823,7 @@ public class ClaimCommand {
                 });
                 permNode.executes(context -> {
                     Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
-                    if (verifyPermission(claim1, Claim.Permission.CHANGE_PERMISSIONS, context, admin)) {
+                    if (verifyPermission(claim1, Claim.Permission.MODIFY_PERMISSIONS, context, admin)) {
                         String group1 = StringArgumentType.getString(context, "group");
                         verifyGroup(group1);
                         boolean permission = hasPermission(claim1, group1, value);
@@ -976,7 +1016,7 @@ public class ClaimCommand {
     private static int checkPlayer(ServerCommandSource ret, UUID player) throws CommandSyntaxException {
         int blocks = ClaimManager.INSTANCE.getClaimBlocks(player);
         ret.sendFeedback(new LiteralText((ret.getPlayer().getGameProfile().getId().equals(player) ? "You have " : "They have ") + ClaimManager.INSTANCE.getClaimBlocks(player) + " blocks left").setStyle(new Style()
-                .setColor(Formatting.YELLOW).setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText("Area of " + ItsMine.blocksToAreaString(ClaimManager.INSTANCE.getClaimBlocks(player))).formatted(Formatting.YELLOW)))), false);
+                .setColor(Formatting.YELLOW).setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText("Area of " + ItsMine.blocksToAreaString(blocks)).formatted(Formatting.YELLOW)))), false);
         return 0;
     }
     private static int requestDelete(ServerCommandSource sender, Claim claim, boolean admin) throws CommandSyntaxException {
@@ -1262,7 +1302,7 @@ public class ClaimCommand {
             context.getSource().sendError(new LiteralText("That name is already taken!"));
             return -1;
         }
-        if (!admin && !claimToRename.hasPermission(context.getSource().getPlayer().getUuid(), Claim.Permission.MODIFY)) {
+        if (!admin && !claimToRename.hasPermission(context.getSource().getPlayer().getUuid(), Claim.Permission.MODIFY_PROPERTIES)) {
             context.getSource().sendError(new LiteralText("You don't have permission to modify claim properties!"));
             return -1;
         }
@@ -1344,12 +1384,24 @@ public class ClaimCommand {
         claim.customOwnerName = name;
         return 1;
     }
+    private static int setOwner(ServerCommandSource source, Claim claim, GameProfile profile) {
+        GameProfile oldOwner = source.getMinecraftServer().getUserCache().getByUuid(claim.claimBlockOwner);
+        source.sendFeedback(new LiteralText("Set the Claim Owner to ")
+                        .formatted(Formatting.YELLOW).append(new LiteralText(profile.getName()).formatted(Formatting.GOLD)).append(new LiteralText(" from "))
+                        .append(new LiteralText(oldOwner == null ? "(" + claim.claimBlockOwner + ")" : oldOwner.getName()).formatted(Formatting.GOLD))
+                        .append(new LiteralText(" for ").formatted(Formatting.YELLOW)).append(new LiteralText(claim.name).formatted(Formatting.GOLD))
+                , false);
+        claim.claimBlockOwner = profile.getId();
+        return 1;
+    }
     private static int setEventMessage(ServerCommandSource source, Claim claim, Claim.MessageEvent event, String message) {
         switch (event) {
             case ENTER_CLAIM:
                 claim.enterMessage = message.equalsIgnoreCase("reset") ? null : message;
+                break;
             case LEAVE_CLAIM:
                 claim.leaveMessage = message.equalsIgnoreCase("reset") ? null : message;
+                break;
         }
 
         if (message.equalsIgnoreCase("reset")) {

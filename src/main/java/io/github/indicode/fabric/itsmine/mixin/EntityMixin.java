@@ -45,10 +45,10 @@ public abstract class EntityMixin {
                 if (serverPlayerEntity.networkHandler != null) {
                     String message = null;
                     if (claim == null && pclaim != null) message = getFormattedEventMessage(player, pclaim, false);
-                    else if (claim != null && pclaim == null) message = getFormattedEventMessage(player, claim, true);
+                    else if (claim != null) message = getFormattedEventMessage(player, claim, true);
 
                     if (message != null)
-                        serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText(ChatColor.translate(message))));
+                        serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText(ChatColor.translate(message)), -1, Config.event_msg_stay_ticks, -1));
                 }
             }
         }

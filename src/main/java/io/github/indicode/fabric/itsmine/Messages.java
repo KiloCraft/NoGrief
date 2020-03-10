@@ -13,4 +13,6 @@ public class Messages {
 
     public static final Text INVALID_PLAYER = new LiteralText("Can not find a Player with that Name!");
 
+    public static final Text TOO_MANY_SELECTIONS = new LiteralText("Only one selection is allowed!");
+
 }

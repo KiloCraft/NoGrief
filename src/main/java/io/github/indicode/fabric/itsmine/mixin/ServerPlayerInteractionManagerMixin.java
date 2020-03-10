@@ -44,7 +44,7 @@ public class ServerPlayerInteractionManagerMixin {
         if (claim != null) {
             UUID uuid = playerEntity_1.getGameProfile().getId();
             if (
-                    claim.hasPermission(uuid, Claim.Permission.ACTIVATE_BLOCKS) ||
+                    claim.hasPermission(uuid, Claim.Permission.INTERACT_BLOCKS) ||
                             (state.getBlock() instanceof AbstractButtonBlock && claim.hasPermission(uuid, Claim.Permission.PRESS_BUTTONS)) ||
                             (state.getBlock() instanceof LeverBlock && claim.hasPermission(uuid, Claim.Permission.USE_LEVERS)) ||
                             (state.getBlock() instanceof DoorBlock && claim.hasPermission(uuid, Claim.Permission.OPEN_DOORS))
@@ -68,9 +68,9 @@ public class ServerPlayerInteractionManagerMixin {
         if (claim != null && !stack.isEmpty()) {
             UUID uuid = playerEntity_1.getGameProfile().getId();
             if (
-                    claim.hasPermission(uuid, Claim.Permission.USE_ITEMS_ON_BLOCKS) ||
-                            (stack.getItem() instanceof BlockItem && claim.hasPermission(uuid, Claim.Permission.PLACE_BREAK)) ||
-                            (stack.getItem() instanceof BucketItem && claim.hasPermission(uuid, Claim.Permission.PLACE_BREAK))
+                    claim.hasPermission(uuid, Claim.Permission.INTERACT_BLOCKS_WITH_ITEMS) ||
+                            (stack.getItem() instanceof BlockItem && claim.hasPermission(uuid, Claim.Permission.BUILD)) ||
+                            (stack.getItem() instanceof BucketItem && claim.hasPermission(uuid, Claim.Permission.BUILD))
             ) return false;
             if (stack.getItem() instanceof BlockItem) {
                 playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_place_block).formatted(Formatting.RED)));
@@ -109,7 +109,7 @@ public class ServerPlayerInteractionManagerMixin {
         if (claim != null) {
             UUID uuid = player.getGameProfile().getId();
             if (
-                    claim.hasPermission(uuid, Claim.Permission.PLACE_BREAK)
+                    claim.hasPermission(uuid, Claim.Permission.BUILD)
             ) return Functions.canPlayerActuallyModifyAt(world, player, pos);
             player.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_break_block).formatted(Formatting.RED)));
             return false;
