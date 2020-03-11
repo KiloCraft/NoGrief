@@ -1,6 +1,5 @@
 package io.github.indicode.fabric.itsmine;
 
-import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -47,7 +46,11 @@ public class Messages {
                     .append(line(3, "To shrink a claim you do the same thing but replace \"expand\" with \"shrink\""))
     };
 
-    public static Text[] HELP = new Text[]{
+    public static final Text[] HELP = new Text[]{
+            header("Arguments")
+                    .append(line("&6create ").append(text("&eCreates a claim")))
+                    .append(line("&6blocks ").append(text("&eShows how many blocks you have left")))
+                    .append(line("&6claim ").append(text("&eExpands a claim"))),
             header("Arguments")
                     .append(line("&6create ").append(text("&eCreates a claim")))
                     .append(line("&6blocks ").append(text("&eShows how many blocks you have left")))

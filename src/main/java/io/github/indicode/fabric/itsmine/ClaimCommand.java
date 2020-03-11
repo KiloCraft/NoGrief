@@ -112,7 +112,7 @@ public class ClaimCommand {
     };
     public static final SuggestionProvider<ServerCommandSource> MESSAGE_EVENTS_PROVIDER = (source, builder) -> {
         List<String> strings = new ArrayList<>();
-        for (Claim.MessageEvent value : Claim.MessageEvent.values()) {
+        for (Claim.Event value : Claim.Event.values()) {
             strings.add(value.id);
         }
         return CommandSource.suggestMatching(strings, builder);
@@ -125,10 +125,10 @@ public class ClaimCommand {
         strings.add("reset");
         try {
             Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(source, "claim"));
-            Claim.MessageEvent eventType = Claim.MessageEvent.getById(StringArgumentType.getString(source, "messageEvent"));
+            Claim.Event eventType = Claim.Event.getById(StringArgumentType.getString(source, "messageEvent"));
 
             if (eventType != null && claim != null) {
-                String message = eventType == Claim.MessageEvent.ENTER_CLAIM ? claim.enterMessage : claim.leaveMessage;
+                String message = eventType == Claim.Event.ENTER_CLAIM ? claim.enterMessage : claim.leaveMessage;
                 if (message != null) strings.add(message);
             }
 
@@ -138,14 +138,27 @@ public class ClaimCommand {
         return CommandSource.suggestMatching(strings, builder);
     };
 
+    private static void registerHelp(LiteralArgumentBuilder<ServerCommandSource> builder, String id, Text[] texts, String title) {
+        LiteralArgumentBuilder<ServerCommandSource> argumentBuilder = CommandManager.literal(id)
+                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, 1, title, "/claim help " + id + " %page%"));
+        RequiredArgumentBuilder<ServerCommandSource, Integer> pageArgument = CommandManager.argument("page", IntegerArgumentType.integer(1, texts.length))
+                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, IntegerArgumentType.getInteger(context, "page"), title, "/claim help " + id + " %page%"));
+
+        argumentBuilder.then(pageArgument);
+        builder.then(argumentBuilder);
+    }
+
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         LiteralArgumentBuilder<ServerCommandSource> command = CommandManager.literal("claim")
-                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, 1, "Get Started", "/claim %page%"));
+                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, 1, "Get Started", "/claim help get_started %page%"));
+        {
+            LiteralArgumentBuilder<ServerCommandSource> help = CommandManager.literal("help");
+            help.executes((context) -> sendPage(context.getSource(), Messages.HELP, 1, "Its Mine!", "/claim help commands %page%"));
 
-        RequiredArgumentBuilder<ServerCommandSource, Integer> pageArg = CommandManager.argument("page", IntegerArgumentType.integer(1, 4))
-                .executes((context) -> sendPage(context.getSource(), Messages.GET_STARTED, IntegerArgumentType.getInteger(context, "page"), "Get Started", "/claim %page%"));
-
-        command.then(pageArg);
+            registerHelp(help, "commands", Messages.HELP, "Its Mine!");
+            registerHelp(help, "get_started", Messages.GET_STARTED, "Get Started");
+            command.then(help);
+        }
         {
             LiteralArgumentBuilder<ServerCommandSource> create = CommandManager.literal("create");
             RequiredArgumentBuilder<ServerCommandSource, String> name = CommandManager.argument("name", StringArgumentType.word());
@@ -184,14 +197,6 @@ public class ClaimCommand {
             command.then(create);
         }
         {
-            LiteralArgumentBuilder<ServerCommandSource> help = CommandManager.literal("help");
-            RequiredArgumentBuilder<ServerCommandSource, Integer> page = CommandManager.argument("page", IntegerArgumentType.integer(1, 5));
-            help.executes((context) -> sendPage(context.getSource(), Messages.HELP, 1, "Its Mine!", "/claim help %page%"));
-            page.executes((context) ->  sendPage(context.getSource(), Messages.HELP, IntegerArgumentType.getInteger(context, "page"), "Its Mine!", "/claim help %page%"));
-            help.then(page);
-            command.then(help);
-        }
-        {
             LiteralArgumentBuilder<ServerCommandSource> rename = CommandManager.literal("rename");
             RequiredArgumentBuilder<ServerCommandSource, String> claimArgument = CommandManager.argument("claim", StringArgumentType.word())
                     .suggests(CLAIM_PROVIDER);
@@ -213,7 +218,7 @@ public class ClaimCommand {
                 ServerPlayerEntity player = context.getSource().getPlayer();
                 Claim claim = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
                 validateCanAccess(player, claim, PERMISSION_CHECK_ADMIN.test(context.getSource()));
-                Claim.MessageEvent event = Claim.MessageEvent.getById(StringArgumentType.getString(context, "messageEvent"));
+                Claim.Event event = Claim.Event.getById(StringArgumentType.getString(context, "messageEvent"));
 
                 if (event == null) {
                     context.getSource().sendError(Messages.INVALID_MESSAGE_EVENT);
@@ -706,6 +711,9 @@ public class ClaimCommand {
     }
 
     private static int sendPage(ServerCommandSource source, Text[] text, int page, String title, String command) {
+        int prevPage = page - 2;
+        int thisPage = page - 1;
+        int nextPage = page + 1;
         final String SEPARATOR = "-----------------------------------------------------";
         Text header =  new LiteralText("")
                 .append(new LiteralText("- [ ").formatted(Formatting.GRAY))
@@ -715,20 +723,22 @@ public class ClaimCommand {
                 .formatted(Formatting.GRAY);
 
         Text button_prev = new LiteralText("")
-                .append(new LiteralText("<-").formatted(Formatting.GRAY, Formatting.BOLD))
+                .append(new LiteralText("<-").formatted(Formatting.WHITE, Formatting.BOLD))
                 .append(" ").append(new LiteralText("Prev").formatted(Formatting.GOLD))
-                .setStyle(new Style()
-                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText((page - 1 > text.length) ? "<<<" : "|<").formatted(Formatting.GRAY)))
-                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf((page + 1 == text.length) ? 1 : (page - 1 == 0 ? 1 : page - 1)))))
-                );
+                .styled((style) -> {
+                    style.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText((prevPage >= 0) ? "<<<" : "|<").formatted(Formatting.GRAY)));
+                    if (prevPage >= 0)
+                        style.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf(prevPage))));
+                });
 
         Text button_next = new LiteralText("")
                 .append(new LiteralText("Next").formatted(Formatting.GOLD))
-                .append(" ").append(new LiteralText("->").formatted(Formatting.GRAY, Formatting.BOLD)).append(" ")
-                .setStyle(new Style()
-                        .setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText((page - 1 > text.length) ? "<<<" : ">|").formatted(Formatting.GRAY)))
-                        .setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf((page + 1 == text.length) ? 1 : (page + 1)))))
-                );
+                .append(" ").append(new LiteralText("->").formatted(Formatting.WHITE, Formatting.BOLD)).append(" ")
+                .styled((style) -> {
+                    style.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new LiteralText((nextPage <= text.length) ? ">>>" : ">|").formatted(Formatting.GRAY)));
+                    if (nextPage < text.length)
+                        style.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command.replace("%page%",  String.valueOf(nextPage))));
+                });
 
         Text buttons = new LiteralText("")
                 .append(new LiteralText("[ ").formatted(Formatting.GRAY))
@@ -737,7 +747,7 @@ public class ClaimCommand {
                 .append(
                         new LiteralText(String.valueOf(page)).formatted(Formatting.GREEN)
                         .append(new LiteralText("/").formatted(Formatting.GRAY))
-                        .append(new LiteralText(String.valueOf(text.length - 1)).formatted(Formatting.GREEN))
+                        .append(new LiteralText(String.valueOf(text.length)).formatted(Formatting.GREEN))
                 )
                 .append(" ")
                 .append(button_next)
@@ -747,7 +757,7 @@ public class ClaimCommand {
                 .formatted(Formatting.GRAY)
                 .append(buttons).append(new LiteralText(" ------------------------------").formatted(Formatting.GRAY));
 
-        header.append("\n").append(text[page]).append("\n").append(footer);
+        header.append("\n").append(text[thisPage]).append("\n").append(footer);
         source.sendFeedback(header, false);
         return 1;
     }
@@ -755,17 +765,17 @@ public class ClaimCommand {
     private static void createExceptionCommand(LiteralArgumentBuilder<ServerCommandSource> command, boolean admin) {
         {
             LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
+            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
             RequiredArgumentBuilder<ServerCommandSource, String> id = CommandManager.argument("setting", StringArgumentType.word()).suggests(SETTINGS_PROVIDER);
             RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
-            RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
 
             id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, false, admin));
             set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, BoolArgumentType.getBool(context, "set"), admin));
             claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), false, BoolArgumentType.getBool(context, "set"), admin));
 
-            set.then(claim);
             id.then(set);
-            settings.then(id);
+            claim.then(id);
+            settings.then(claim);
             command.then(settings);
         }
 
@@ -1453,7 +1463,7 @@ public class ClaimCommand {
         claim.claimBlockOwner = profile.getId();
         return 1;
     }
-    private static int setEventMessage(ServerCommandSource source, Claim claim, Claim.MessageEvent event, String message) {
+    private static int setEventMessage(ServerCommandSource source, Claim claim, Claim.Event event, String message) {
         switch (event) {
             case ENTER_CLAIM:
                 claim.enterMessage = message.equalsIgnoreCase("reset") ? null : message;
@@ -1491,9 +1501,6 @@ public class ClaimCommand {
         validateCanAccess(player, claim1, admin);
         Claim.ClaimSettings.Setting setting = Claim.ClaimSettings.Setting.byId(input);
 
-        System.out.println(setting);
-        System.out.println(claim1);
-
 
         if (setting != null)
             return !isQuery ? setSetting(source, claim1, setting, value) : querySetting(source, claim1, setting);
@@ -1530,12 +1537,12 @@ public class ClaimCommand {
     }
     private static int queryPermission(ServerCommandSource source, Claim claim, Claim.Permission permission) {
         boolean defaultPerm = claim.permissionManager.defaults.hasPermission(permission);
-        source.sendFeedback(new LiteralText("Players" + (defaultPerm ? " do" : " does not") + " have the permission " + permission.name).formatted(Formatting.YELLOW), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&ePermission &6" + permission.id + " is set to " + (defaultPerm ? "&a" : "&c") + defaultPerm + "&e for " + claim.name)), false);
         return 1;
     }
     private static int setPermission(ServerCommandSource source, Claim claim, Claim.Permission permission, boolean set) {
         claim.permissionManager.defaults.setPermission(permission, set);
-        source.sendFeedback(new LiteralText("Players" + (set ? " do" : " does not") + " have the permission " + permission.name).formatted(Formatting.YELLOW), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet permission &6" + permission.id + " to " + (set ? "&a" : "&c") + set + "&e for " + claim.name)), false);
         return 1;
     }
 }

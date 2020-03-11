@@ -3,8 +3,12 @@ package io.github.indicode.fabric.itsmine.mixin;
 import io.github.indicode.fabric.itsmine.*;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.network.packet.s2c.play.PlaySoundIdS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.LiteralText;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -58,6 +62,10 @@ public abstract class EntityMixin {
                     this.field_22467 = new Vec3d(x, y, z);
                     this.field_22468 = new BlockPos(x, y, z);
                     serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText(ChatColor.translate(Config.msg_cant_enter))));
+
+                    if (claim.settings.getSetting(Claim.ClaimSettings.Setting.ENTER_SOUND)) {
+                        serverPlayerEntity.networkHandler.sendPacket(new PlaySoundIdS2CPacket(SoundEvents.BLOCK_CONDUIT_ACTIVATE.getId(), SoundCategory.MASTER, player.getPos(), 1, 1.2F));
+                    }
 
                     return;
                 }

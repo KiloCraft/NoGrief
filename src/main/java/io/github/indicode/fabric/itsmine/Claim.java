@@ -468,7 +468,8 @@ public class Claim {
             PISTON_FROM_OUTSIDE("pistons_outside_border", "Pistons Cross border from Outside", false),
             MOB_SPAWNING("mob_spawn", "Natural mob spawning", true),
             KEEP_INVENTORY("keep_inventory", "Keep Inventory", true),
-            TELEPORT("teleport", "Global Teleport Access", true);
+            TELEPORT("teleport", "Global Teleport Access", true),
+            ENTER_SOUND("enter_sound", "Enter Sound", true);
 
             String id, name;
             boolean defaultValue;
@@ -510,20 +511,21 @@ public class Claim {
             });
         }
     }
-    public enum MessageEvent {
+
+    public enum Event {
         ENTER_CLAIM("enter", Config.msg_enter_default),
         LEAVE_CLAIM("leave", Config.msg_leave_default);
 
         String id;
         String defaultValue;
-        MessageEvent(String id, String defaultValue) {
+        Event(String id, String defaultValue) {
             this.id = id;
             this.defaultValue = defaultValue;
         }
 
         @Nullable
-        public static MessageEvent getById(String id) {
-            for (MessageEvent value : values()) {
+        public static Event getById(String id) {
+            for (Event value : values()) {
                 if (value.id.equalsIgnoreCase(id)) {
                     return value;
                 }
