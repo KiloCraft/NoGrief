@@ -1,9 +1,6 @@
 package io.github.indicode.fabric.itsmine.mixin;
 
-import io.github.indicode.fabric.itsmine.Claim;
-import io.github.indicode.fabric.itsmine.ClaimManager;
-import io.github.indicode.fabric.itsmine.Config;
-import io.github.indicode.fabric.itsmine.Functions;
+import io.github.indicode.fabric.itsmine.*;
 import net.minecraft.block.AbstractButtonBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.DoorBlock;
@@ -69,20 +66,12 @@ public class ServerPlayerInteractionManagerMixin {
             UUID uuid = playerEntity_1.getGameProfile().getId();
             if (
                     claim.hasPermission(uuid, Claim.Permission.INTERACT_BLOCKS_WITH_ITEMS) ||
-                            (stack.getItem() instanceof BlockItem && claim.hasPermission(uuid, Claim.Permission.BUILD)) ||
-                            (stack.getItem() instanceof BucketItem && claim.hasPermission(uuid, Claim.Permission.BUILD))
-            ) return false;
-            if (stack.getItem() instanceof BlockItem) {
-                playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_place_block).formatted(Formatting.RED)));
-            }
-            if (stack.getItem() instanceof BucketItem) {
-                if (!Functions.isBucketEmpty((BucketItem) stack.getItem())) {
-                    playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_interact_block).formatted(Formatting.RED)));
-                } else {
-                    playerEntity_1.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_interact_block).formatted(Formatting.RED)));
-                }
-            }
-            return true;
+                            ((stack.getItem() instanceof BlockItem || stack.getItem() instanceof BucketItem) && claim.hasPermission(uuid, Claim.Permission.BUILD))
+            )
+                return true;
+
+            playerEntity_1.sendMessage(Messages.MSG_PLACE_BLOCK);
+            return false;
         }
         return stack.isEmpty();
     }
@@ -108,10 +97,10 @@ public class ServerPlayerInteractionManagerMixin {
         Claim claim = ClaimManager.INSTANCE.getClaimAt(pos, player.world.getDimension().getType());
         if (claim != null) {
             UUID uuid = player.getGameProfile().getId();
-            if (
-                    claim.hasPermission(uuid, Claim.Permission.BUILD)
-            ) return Functions.canPlayerActuallyModifyAt(world, player, pos);
-            player.sendMessage(new LiteralText("").append(new LiteralText(Config.msg_break_block).formatted(Formatting.RED)));
+            if (claim.hasPermission(uuid, Claim.Permission.BUILD))
+                return Functions.canPlayerActuallyModifyAt(world, player, pos);
+
+            player.sendMessage(Messages.MSG_BREAK_BLOCK);
             return false;
         }
         return world.canPlayerModifyAt(player, pos);

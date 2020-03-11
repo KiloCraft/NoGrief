@@ -12,6 +12,7 @@ import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.LiteralText;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.registry.Registry;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -45,7 +46,7 @@ public abstract class EntityMixin {
             pclaim = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.world.dimension.getType());
         }
     }
-    @Inject(method = "setPos", at = @At("RETURN"))
+    @Inject(method = "setPos", at = @At("RETURN"), cancellable = true)
     public void doPostPosActions(double x, double y, double z, CallbackInfo ci) {
         if (!world.isClient && (Object)this instanceof PlayerEntity) {
             PlayerEntity player = (PlayerEntity) (Object) this;
@@ -61,12 +62,9 @@ public abstract class EntityMixin {
                     this.z = z;
                     this.field_22467 = new Vec3d(x, y, z);
                     this.field_22468 = new BlockPos(x, y, z);
-                    serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText(ChatColor.translate(Config.msg_cant_enter))));
+                    serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, Messages.MSG_CANT_ENTER));
 
-                    if (claim.settings.getSetting(Claim.ClaimSettings.Setting.ENTER_SOUND)) {
-                        serverPlayerEntity.networkHandler.sendPacket(new PlaySoundIdS2CPacket(SoundEvents.BLOCK_CONDUIT_ACTIVATE.getId(), SoundCategory.MASTER, player.getPos(), 1, 1.2F));
-                    }
-
+                    ci.cancel();
                     return;
                 }
 
@@ -78,6 +76,10 @@ public abstract class EntityMixin {
 
                         if (message != null)
                             serverPlayerEntity.networkHandler.sendPacket(new TitleS2CPacket(TitleS2CPacket.Action.ACTIONBAR, new LiteralText(ChatColor.translate(message)), -1, Config.event_msg_stay_ticks, -1));
+
+                        if (claim.settings.getSetting(Claim.ClaimSettings.Setting.ENTER_SOUND)) {
+                            serverPlayerEntity.networkHandler.sendPacket(new PlaySoundIdS2CPacket(Registry.SOUND_EVENT.getId(SoundEvents.BLOCK_CONDUIT_ACTIVATE), SoundCategory.MASTER, player.getPos(), 2, 1.2F));
+                        }
                     }
                 }
             }
@@ -86,7 +88,7 @@ public abstract class EntityMixin {
 
     private String getFormattedEventMessage(PlayerEntity player, Claim claim, boolean enter) {
         String str = enter ? claim.enterMessage : claim.leaveMessage;
-        return  ChatColor.translate(str == null ? (enter ? Config.msg_enter_default : Config.msg_leave_default) : str).replace("%claim%", claim.name)
+        return ChatColor.translate(str == null ? (enter ? Config.msg_enter_default : Config.msg_leave_default) : str).replace("%claim%", claim.name)
                 .replace("%player%", player.getEntityName());
     }
 
@@ -101,7 +103,7 @@ public abstract class EntityMixin {
             boolean old = player.abilities.allowFlying;
             Claim claim = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.world.dimension.getType());
             if (player instanceof ServerPlayerEntity) {
-                if (player.abilities.allowFlying && ((claim == null || !claim.settings.getSetting(Claim.ClaimSettings.Setting.FLIGHT_ALLOWED) || !claim.hasPermission(player.getGameProfile().getId(), Claim.Permission.FLIGHT)) && Functions.isClaimFlying(player.getGameProfile().getId()))) {
+                if (player.abilities.allowFlying && ((claim == null || !claim.settings.getSetting(Claim.ClaimSettings.Setting.FLIGHT_ALLOWED) || !claim.hasPermission(player.getGameProfile().getId(), Claim.Permission.FLIGHT)) && Functions.isClaimFlying(player.getGameProfile().getId())) && !player.isSpectator()) {
                     player.abilities.allowFlying = false;
                     player.abilities.flying = false;
                     Functions.setClaimFlying(player.getGameProfile().getId(), false);

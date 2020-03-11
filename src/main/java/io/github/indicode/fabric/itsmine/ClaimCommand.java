@@ -243,7 +243,7 @@ public class ClaimCommand {
                     context.getSource().sendError(new LiteralText("That claim does not exist"));
                     return -1;
                 }
-                return showTrustedList(context, claim);
+                return showTrustedList(context, claim, false);
             });
 
             claimArgument.executes((context) -> {
@@ -252,7 +252,7 @@ public class ClaimCommand {
                     context.getSource().sendError(new LiteralText("That claim does not exist"));
                     return -1;
                 }
-                return showTrustedList(context, claim);
+                return showTrustedList(context, claim, false);
             });
             trusted.then(claimArgument);
             command.then(trusted);
@@ -766,12 +766,34 @@ public class ClaimCommand {
         {
             LiteralArgumentBuilder<ServerCommandSource> settings = CommandManager.literal("settings");
             RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
+
+            if (!admin) {
+                settings.executes((context) -> {
+                    ServerPlayerEntity player = context.getSource().getPlayer();
+                    Claim claim1 = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension);
+                    if (claim == null) {
+                        context.getSource().sendError(Messages.INVALID_CLAIM);
+                        return -1;
+                    }
+                    return querySettings(context.getSource(), claim1);
+                });
+
+                claim.executes((context) -> {
+                    Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
+                    if (claim1 == null) {
+                        context.getSource().sendError(Messages.INVALID_CLAIM);
+                        return -1;
+                    }
+                    return querySettings(context.getSource(), claim1);
+                });
+            }
+
             RequiredArgumentBuilder<ServerCommandSource, String> id = CommandManager.argument("setting", StringArgumentType.word()).suggests(SETTINGS_PROVIDER);
             RequiredArgumentBuilder<ServerCommandSource, Boolean> set = CommandManager.argument("set", BoolArgumentType.bool());
 
             id.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, true, false, admin));
             set.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), null, false, BoolArgumentType.getBool(context, "set"), admin));
-            claim.executes((context) -> executeSetting(context.getSource(), StringArgumentType.getString(context, "setting"), StringArgumentType.getString(context, "claim"), false, BoolArgumentType.getBool(context, "set"), admin));
+            claim.executes((context) -> executeSetting(context.getSource(), null, StringArgumentType.getString(context, "claim"), false, BoolArgumentType.getBool(context, "set"), admin));
 
             id.then(set);
             claim.then(id);
@@ -781,7 +803,32 @@ public class ClaimCommand {
 
         LiteralArgumentBuilder<ServerCommandSource> exceptions = CommandManager.literal("permissions");
         if (admin) exceptions.requires(source -> Thimble.hasPermissionOrOp(source, "itsmine.admin.modify_permissions", 2));
+
+        if (!admin) {
+            exceptions.executes((context) -> {
+                ServerPlayerEntity player = context.getSource().getPlayer();
+                Claim claim = ClaimManager.INSTANCE.getClaimAt(player.getSenseCenterPos(), player.dimension);
+                if (claim == null) {
+                    context.getSource().sendError(Messages.INVALID_CLAIM);
+                    return -1;
+                }
+                return showTrustedList(context, claim, true);
+            });
+        }
+
         RequiredArgumentBuilder<ServerCommandSource, String> claim = getClaimArgument();
+
+        if (!admin) {
+            claim.executes((context) -> {
+                Claim claim1 = ClaimManager.INSTANCE.claimsByName.get(StringArgumentType.getString(context, "claim"));
+                if (claim1 == null) {
+                    context.getSource().sendError(new LiteralText("That claim does not exist"));
+                    return -1;
+                }
+                return showTrustedList(context, claim1, true);
+            });
+        }
+
         LiteralArgumentBuilder<ServerCommandSource> playerLiteral = CommandManager.literal("player");
         LiteralArgumentBuilder<ServerCommandSource> globalLiteral = CommandManager.literal("global");
         {
@@ -1275,27 +1322,9 @@ public class ClaimCommand {
                                 new LiteralText("Not Present").formatted(Formatting.RED, Formatting.ITALIC)));
         text.append(newInfoLine("Size", new LiteralText(size.getX() + (claim.is2d() ? "x" : ("x" + size.getY() + "x")) + size.getZ()).formatted(Formatting.GREEN)));
 
-        Text claimFlags = new LiteralText("");
-        boolean nextEnabled = false;
-        boolean nextDisabled = false;
-        for (Claim.ClaimSettings.Setting value : Claim.ClaimSettings.Setting.values()) {
-            boolean enabled = claim.settings.getSetting(value);
-            Formatting formatting;
-            if (enabled) {
-                if (nextEnabled) formatting = Formatting.GREEN;
-                else formatting = Formatting.DARK_GREEN;
-                nextEnabled = !nextEnabled;
-            } else {
-                if (nextDisabled) formatting = Formatting.RED;
-                else formatting = Formatting.DARK_RED;
-                nextDisabled = !nextDisabled;
-            }
 
-            claimFlags.append(" ").append(new LiteralText(value.id).formatted(formatting));
-        }
-
-        text.append(new LiteralText("").append(new LiteralText("* Flags:").formatted(Formatting.YELLOW))
-                .append(claimFlags).append("\n"));
+        text.append(new LiteralText("").append(new LiteralText("* Settings:").formatted(Formatting.YELLOW))
+                .append(Messages.Command.getSettings(claim)).append("\n"));
         Text pos = new LiteralText("");
         Text min = newPosLine(claim.min, Formatting.AQUA, Formatting.DARK_AQUA);
         Text max = newPosLine(claim.max, Formatting.LIGHT_PURPLE, Formatting.DARK_PURPLE);
@@ -1382,12 +1411,12 @@ public class ClaimCommand {
         context.getSource().sendFeedback(new LiteralText("Renamed Claim " + name + " to " + newName).formatted(Formatting.GOLD), admin);
         return -1;
     }
-    private static int showTrustedList(CommandContext<ServerCommandSource> context, Claim claim) throws CommandSyntaxException {
+    private static int showTrustedList(CommandContext<ServerCommandSource> context, Claim claim, boolean showSelf) throws CommandSyntaxException {
         ServerCommandSource source = context.getSource();
         ServerPlayerEntity player = source.getPlayer();
         int mapSize = claim.permissionManager.playerPermissions.size();
 
-        if (mapSize == 1) {
+        if (mapSize == 1 && !showSelf) {
             source.sendError(new LiteralText(claim.name + " is not trusting anyone!"));
             return -1;
         }
@@ -1527,22 +1556,27 @@ public class ClaimCommand {
     }
     private static int querySetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting) {
         boolean enabled = claim.settings.settings.get(setting);
-        source.sendFeedback(new LiteralText(ChatColor.translate("&eSetting &6" + setting.name + " is set to " + (enabled ? "&a" : "&c") + enabled + "&e for " + claim.name)), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSetting &6" + setting.name + " is set to " + (enabled ? "&a" : "&c") + enabled + "&e for &6" + claim.name)), false);
         return 1;
     }
     private static int setSetting(ServerCommandSource source, Claim claim, Claim.ClaimSettings.Setting setting, boolean set) {
         claim.settings.settings.put(setting, set);
-        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet setting &6" + setting.name + " to " + (set ? "&a" : "&c") + set + "&e for " + claim.name)), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet setting &6" + setting.name + "&e to " + (set ? "&a" : "&c") + set + "&e for &6" + claim.name)), false);
         return 0;
     }
     private static int queryPermission(ServerCommandSource source, Claim claim, Claim.Permission permission) {
         boolean defaultPerm = claim.permissionManager.defaults.hasPermission(permission);
-        source.sendFeedback(new LiteralText(ChatColor.translate("&ePermission &6" + permission.id + " is set to " + (defaultPerm ? "&a" : "&c") + defaultPerm + "&e for " + claim.name)), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&ePermission &6" + permission.id + " is set to " + (defaultPerm ? "&a" : "&c") + defaultPerm + "&e for &6" + claim.name)), false);
         return 1;
     }
     private static int setPermission(ServerCommandSource source, Claim claim, Claim.Permission permission, boolean set) {
         claim.permissionManager.defaults.setPermission(permission, set);
-        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet permission &6" + permission.id + " to " + (set ? "&a" : "&c") + set + "&e for " + claim.name)), false);
+        source.sendFeedback(new LiteralText(ChatColor.translate("&eSet permission &6" + permission.id + "&e to " + (set ? "&a" : "&c") + set + "&e for &6" + claim.name)), false);
+        return 1;
+    }
+    private static int querySettings(ServerCommandSource source, Claim claim) {
+        source.sendFeedback(new LiteralText("\n").append(new LiteralText("Settings: " + claim.name).formatted(Formatting.YELLOW))
+                .append(Messages.Command.getSettings(claim)).append("\n"), false);
         return 1;
     }
 }

@@ -17,6 +17,16 @@ public class Messages {
 
     public static final Text TOO_MANY_SELECTIONS = new LiteralText("Only one selection is allowed!");
 
+    public static final Text MSG_PLACE_BLOCK = new LiteralText(ChatColor.translate(Config.msg_place_block)).formatted(Formatting.RED);
+
+    public static final Text MSG_BREAK_BLOCK = new LiteralText(ChatColor.translate(Config.msg_break_block)).formatted(Formatting.RED);
+
+    public static final Text MSG_CANT_ENTER = new LiteralText(ChatColor.translate(Config.msg_cant_enter)).formatted(Formatting.RED);
+
+    public static final Text MSG_ENTER_DEFAULT = new LiteralText(ChatColor.translate(Config.msg_enter_default)).formatted(Formatting.RED);
+
+    public static final Text MSG_LEAVE_DEFAULT = new LiteralText(ChatColor.translate(Config.msg_leave_default)).formatted(Formatting.RED);
+
     public static final Text[] GET_STARTED = new Text[]{
             header("How to Claim (Basics)")
                     .append(line(1, "Type &6/claim stick&e then Left click with a stick on a block to set the &6first&e corner of your claim"))
@@ -71,5 +81,31 @@ public class Messages {
 
     private static Text text(String text) {
         return new LiteralText(text);
+    }
+
+    public static class Command {
+        public static Text getSettings(Claim claim) {
+            Text claimSettings = new LiteralText("");
+            boolean nextEnabled = false;
+            boolean nextDisabled = false;
+            for (Claim.ClaimSettings.Setting value : Claim.ClaimSettings.Setting.values()) {
+                boolean enabled = claim.settings.getSetting(value);
+                Formatting formatting;
+                if (enabled) {
+                    if (nextEnabled) formatting = Formatting.GREEN;
+                    else formatting = Formatting.DARK_GREEN;
+                    nextEnabled = !nextEnabled;
+                } else {
+                    if (nextDisabled) formatting = Formatting.RED;
+                    else formatting = Formatting.DARK_RED;
+                    nextDisabled = !nextDisabled;
+                }
+
+                claimSettings.append(" ").append(new LiteralText(value.id).formatted(formatting));
+            }
+
+            return claimSettings;
+        }
+
     }
 }
